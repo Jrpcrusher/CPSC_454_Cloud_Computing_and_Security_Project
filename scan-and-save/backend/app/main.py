@@ -1,6 +1,7 @@
 # Set up the initial connectivity for HTTP requests using FastAPI
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.api.routes import items_router, health_router
 
 # This function creates a FastAPI instance
 def create_app():
@@ -14,9 +15,12 @@ def create_app():
         allow_headers=["*"], # Allows for all HTTP header types
     )
 
-    @app.get("/health") # Create a /health page, which will show the below function.
-    def health():
-        return {"status": "ok"}
+    app.include_router(items_router, prefix="/items", tags=["items"])
+    app.include_router(health_router, prefix="/health", tags=["health"])
+
+    @app.get("/") # Gets the initial status that the api is running
+    def root():
+        return {"message": "Backend API Running"}
     return app
 
 app = create_app()
