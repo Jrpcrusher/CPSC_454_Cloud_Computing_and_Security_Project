@@ -1,7 +1,15 @@
 # Set up the initial connectivity for HTTP requests using FastAPI
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .api.__init__ import admin_router, authenticator_router, health_router, items_router, orders_router, uploads_router
+from .core.config import settings
+from pymongo import MongoClient
+from .api.__init__ import (
+    admin_router,
+    authenticator_router,
+    health_router,
+    items_router,
+    orders_router,
+    uploads_router)
 
 # This function creates a FastAPI instance
 def create_app():
@@ -15,6 +23,7 @@ def create_app():
         allow_headers=["*"], # Allows for all HTTP header types
     )
 
+    # initialize all the routes we can take
     app.include_router(admin_router, prefix="/admin", tags=["admin"])
     app.include_router(authenticator_router, prefix="/auth", tags=["auth"])
     app.include_router(health_router, prefix="/health", tags=["health"])
@@ -22,6 +31,17 @@ def create_app():
     app.include_router(orders_router, prefix="/orders", tags=["orders"])
     app.include_router(uploads_router, prefix="/uploads", tags=["uploads"])
 
+    # attach the database on website start and close when shutdown
+    @app.on_event("startup")
+    def startup_db_client():
+        app.mongodb_client = MongoClient(settings.MONGODB_URI)
+        app.database = app.mongodb_client[settings.DB_NAME]
+        print("INFO:     Connected to MongoDB database open.")
+
+    @app.on_event("shutdown")
+    def shutdown_db_client():
+        app.mongodb_client.close()
+        print("INFO:     Connection to MongoDB database closed")
 
     @app.get("/") # Gets the initial status that the api is running
     def root():

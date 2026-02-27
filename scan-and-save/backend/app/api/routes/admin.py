@@ -1,10 +1,11 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
+from ...services.db_service import *
 
 router = APIRouter()
 
 @router.get("/users") # Method to get a list of all users in the system
-def view_users():
-    return []
+def view_users(request : Request):
+    return get_all_users(request)
 
 @router.delete("/users/{user_id}") # Method to delete users
 def delete_user(user_id: str):
