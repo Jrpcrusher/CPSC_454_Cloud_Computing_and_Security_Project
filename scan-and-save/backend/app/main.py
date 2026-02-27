@@ -1,7 +1,7 @@
 # Set up the initial connectivity for HTTP requests using FastAPI
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.routes import items_router, health_router
+from app.api.routes import admin_router, authenticator_router, health_router, items_router, orders_router, uploads_router
 
 # This function creates a FastAPI instance
 def create_app():
@@ -15,8 +15,13 @@ def create_app():
         allow_headers=["*"], # Allows for all HTTP header types
     )
 
-    app.include_router(items_router, prefix="/items", tags=["items"])
+    app.include_router(admin_router, prefix="/admin", tags=["admin"])
+    app.include_router(authenticator_router, prefix="/auth", tags=["auth"])
     app.include_router(health_router, prefix="/health", tags=["health"])
+    app.include_router(items_router, prefix="/items", tags=["items"])
+    app.include_router(orders_router, prefix="/orders", tags=["orders"])
+    app.include_router(uploads_router, prefix="/uploads", tags=["uploads"])
+
 
     @app.get("/") # Gets the initial status that the api is running
     def root():
