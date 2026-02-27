@@ -1,0 +1,11 @@
+from pydantic_settings import BaseSettings
+
+class Settings(BaseSettings):
+    MONGODB_URI: str # Must have the mongoDB URI
+    STRIPE_KEY: str | None = None # We either have the stripe key or not
+    AWS_REGION: str | None = None # We have the AWS region, or not
+
+    class Config:
+        env_file = ".env"
+
+settings = Settings()

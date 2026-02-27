@@ -10,4 +10,5 @@ def upload_item():
 
 @router.delete("/image/{item_id}") # Handles deleting an image (user method)
 def delete_item(item_id: str):
+    # TODO: Make it actually delete the item
     return {"deleted": item_id}

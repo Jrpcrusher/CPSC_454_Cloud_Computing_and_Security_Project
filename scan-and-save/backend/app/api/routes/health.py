@@ -1,6 +1,3 @@
-# Route that AWS services can ping, they can ping "/health" to know that the backend is online
-# and that the container is healthy
-
 from fastapi import APIRouter
 
 router = APIRouter()
