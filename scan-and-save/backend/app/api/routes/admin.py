@@ -11,13 +11,16 @@ def view_users(db = Depends(get_db)):
 
 @router.get("/users/{user_id}", response_model=UserResponse) # Method to view single user
 def view_user(user_id : str, db = Depends(get_db)):
+    print("DEBUG db.name:", db.name)
+    print("DEBUG collections:", db.list_collection_names())
+    print("DEBUG users count:", db["users"].count_documents({}))
     return db_service.get_user(user_id, db)
 
 @router.delete("/users/{user_id}", response_model=UserResponse) # Method to delete single user
 def delete_user(user_id: str, db = Depends(get_db)):
     return db_service.delete_user(user_id, db)
 
-@router.put("/users/{user_id}/role") # Method to escalate privileges of a user account to admin
+@router.patch("/users/{user_id}/role", response_model=UserResponse) # Method to escalate privileges of a user account to admin
 def change_roles(user_id: str, db = Depends(get_db)):
     return db_service.change_roles(user_id, db)
 

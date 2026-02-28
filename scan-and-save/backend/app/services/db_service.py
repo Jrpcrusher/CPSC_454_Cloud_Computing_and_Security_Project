@@ -21,7 +21,7 @@ def get_user(user_id, db):
     except InvalidId:
         raise HTTPException(status_code=400, detail="Invalid user id.")
 
-    user = db["users"].find_one({"_id": ObjectId(oid)})
+    user = db["users"].find_one({"_id": oid})
 
     if not user: # if we dont find the user, then say user was not found
         raise HTTPException(status_code=404, detail="User not found.")
@@ -35,7 +35,7 @@ def delete_user(user_id, db):
     except InvalidId:
         raise HTTPException(status_code=400, detail="Invalid user id.")
     
-    deleted_user = db["users"].delete_one({"_id": ObjectId(oid)})
+    deleted_user = db["users"].delete_one({"_id": oid})
 
     if deleted_user.deleted_count == 0: # if we dont find the user, then say user was not found
         raise HTTPException(status_code=404, detail="User not found.")
@@ -47,26 +47,22 @@ def change_role(user_id, db):
         oid = ObjectId(user_id)
     except InvalidId:
         raise HTTPException(status_code=400, detail="Invalid user id.")
-    user = db["users"].find_one({"_id": ObjectId(oid)})
+    user = db["users"].find_one({"_id": oid})
     if not user: # if we dont find the user, then say user was not found
         raise HTTPException(status_code=404, detail="User not found.")
     
-    current_role = user.get("role", "user")
-
-    match current_role:
-        case "admin":
-            new_role = "user"
-        case "user":
-            new_role = "admin"
+    current_role = user.get("role","user")
+    new_role = "admin" if current_role == "user" else "user"
 
     updated_user = db["users"].update_one(
-        {"role": "admin"},
+        {"_id": oid},
         {"$set": {"role": new_role}}
     )
 
     if updated_user.matched_count == 0: # if we dont find the user, then say user was not found
         raise HTTPException(status_code=404, detail="User not found.")
-    return {"message": "Role of user changed to {new_role}"}
+    
+    return {"message": f"Role of user changed to {new_role}"}
 # ^^^ DONE ^^^
 
 def create_user(user: CreateUser):
