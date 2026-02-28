@@ -1,10 +1,14 @@
+from fastapi import APIRouter, Body, Request, Response, HTTPException, status
 from fastapi import APIRouter
+from ...models.user import *
+from app.api.deps import *
+from ...services import db_service
 
 router = APIRouter()
 
-@router.post("/register") # Handles new user account creation
-def register():
-    # TODO: On account creation, make new account identifier (ID), and establish password and email associated
+@router.post("/register", response_model=UserResponse) # Handles new user account creation
+def register(user: CreateUser):
+    db_service.create_user(user)
     return {"status": "account_created"}
 
 @router.post("/login") # Handles logging in the user

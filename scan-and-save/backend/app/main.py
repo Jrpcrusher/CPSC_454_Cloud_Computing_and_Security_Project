@@ -37,7 +37,6 @@ def create_app():
         app.mongodb_client = MongoClient(settings.MONGODB_URI)
         app.database = app.mongodb_client[settings.DB_NAME]
         print("INFO:     Connected to MongoDB database open.")
-
     @app.on_event("shutdown")
     def shutdown_db_client():
         app.mongodb_client.close()

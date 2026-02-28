@@ -1,31 +1,40 @@
-from fastapi import APIRouter, Request
-from ...services.db_service import *
+from fastapi import APIRouter, Body, Request, Response, HTTPException, status, Depends
+from ...services import db_service
+from app.api.deps import *
+from ...models.user import *
 
 router = APIRouter()
 
-@router.get("/users") # Method to get a list of all users in the system
-def view_users(request : Request):
-    return get_all_users(request)
+@router.get("/users", response_model=list[UserResponse]) # Method to get a list of all users in the system
+def view_users(db = Depends(get_db)):
+    return db_service.get_all_users(db)
 
-@router.delete("/users/{user_id}") # Method to delete users
-def delete_user(user_id: str):
-    # TODO: Make this method delete the user account specified by the ID, along with remove all related artwork
-    return {"deleted": user_id}
+@router.get("/users/{user_id}", response_model=UserResponse) # Method to view single user
+def view_user(user_id : str, db = Depends(get_db)):
+    return db_service.get_user(user_id, db)
+
+@router.delete("/users/{user_id}", response_model=UserResponse) # Method to delete single user
+def delete_user(user_id: str, db = Depends(get_db)):
+    return db_service.delete_user(user_id, db)
 
 @router.put("/users/{user_id}/role") # Method to escalate privileges of a user account to admin
-def admin(user_id: str):
-    # TODO: Make this method take the user id, and give that user admin permissions to be a site admin
-    return {"admin": user_id}
+def change_roles(user_id: str, db = Depends(get_db)):
+    return db_service.change_roles(user_id, db)
+
+# ^^^ DONE ^^^
 
 @router.delete("/items/{item_id}") # method to delete item id
-def delete_item(item_id: str):
-    # TODO: Make this method take the item id, and give the admin the ability to remove this item from the website
-    return {"deleted": item_id}
+def delete_item(item_id: str, db = Depends(get_db)):
+    return db_service.delete_item(item_id, db)
 
 @router.get("/orders") # Method to view all orders
-def view_orders():
-    return []
+def view_orders(db = Depends(get_db)):
+    return db_service.get_all_orders(db)
+
+@router.get("/orders/{order_id}") # method to get specific order information
+def view_order(order_id : str, db = Depends(get_db)):
+    return db_service.get_order(order_id, db)
 
 @router.delete("/orders/{order_id}") # Method to delete/cancel orders manually
-def delete_order(order_id: str):
-    return {"cancelled": order_id}
+def delete_order(order_id: str, db = Depends(get_db)):
+    return db_service.delete_order(order_id, db)
