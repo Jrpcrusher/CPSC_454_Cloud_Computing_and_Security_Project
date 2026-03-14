@@ -19,7 +19,7 @@ def view_settings(user_id: str, db = Depends(get_db)):
     return db_service.view_settings(user_id, db)
 
 @router.patch("/me/settings", response_model=ViewSettings) # Change values in settings
-def change_settings(user_id: str, settings: UpdateSettings, db = Depends(get_db)):
+def change_settings(user_id: str, settings: Settings, db = Depends(get_db)):
     return db_service.change_settings(user_id, db)
 
 @router.delete("/me") # Delete yourself as user
