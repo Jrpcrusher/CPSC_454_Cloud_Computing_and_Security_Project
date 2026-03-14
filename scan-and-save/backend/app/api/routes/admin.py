@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from ...services import db_service
 from app.api.deps import *
 from ...models.user import *
@@ -55,5 +55,10 @@ def view_order(user_id: str, order_id: str, db = Depends(get_db)):
 @router.delete("/users/{user_id}/orders/{order_id}") # Method to delete single order from user
 def delete_order(user_id: str, order_id: str, db = Depends(get_db)):
     return db_service.delete_order(user_id, order_id, db)
+
+# Search
+@router.get("/users/search")
+def search_users(q: str = Query(..., min_length=1), db = Depends(get_db)):
+    return db_service.search_users(q, db)
 
 # Reports (Opttional later thing)
