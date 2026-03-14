@@ -44,11 +44,11 @@ def delete_image(user_id: str, image_id: str, db = Depends(get_db)):
     return db_service.delete_image(user_id, image_id, db)
 
 # Orders
-@router.get("/users/{user_id}/orders", response_model=list[UserOrder]) # View all orders from user
+@router.get("/users/{user_id}/orders", response_model=list[Order]) # View all orders from user
 def view_orders(user_id: str, db = Depends(get_db)):
     return db_service.get_orders(user_id, db)
 
-@router.get("/users/{user_id}/orders/{order_id}", response_model=UserOrder) # View single order from user
+@router.get("/users/{user_id}/orders/{order_id}", response_model=Order) # View single order from user
 def view_order(user_id: str, order_id: str, db = Depends(get_db)):
     return db_service.get_order(user_id, order_id, db)
 

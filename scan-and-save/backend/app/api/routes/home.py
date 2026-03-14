@@ -29,6 +29,6 @@ def get_image(user_id: str, image_id: str, db = Depends(get_db)):
     return db_service.get_image(user_id, image_id, db)
 
 # Request
-@router.post("/profiles/{user_id}/request", response_model=CommissionRequest)
-def create_order(user_id: str, commission_request: Commission, db = Depends(get_db)):
+@router.post("/profiles/{user_id}/request", response_model=Order)
+def create_order(user_id: str, commission_request: Order, db = Depends(get_db)):
     return db_service.create_order(user_id, commission_request, db)
