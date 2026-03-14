@@ -31,7 +31,7 @@ def make_admin(user_id: str, db = Depends(get_db)):
     return db_service.make_admin(user_id, db)
 
 # Images
-@router.get("/users/{user_id}/images", response_model=list[UserImages]) # View all images from user
+@router.get("/users/{user_id}/images", response_model=list[Image]) # View all images from user
 def view_images(user_id: str, db = Depends(get_db)):
     return db_service.get_images(user_id, db)
 
@@ -44,7 +44,7 @@ def delete_image(user_id: str, image_id: str, db = Depends(get_db)):
     return db_service.delete_image(user_id, image_id, db)
 
 # Orders
-@router.get("/users/{user_id}/orders", response_model=list[UserOrders]) # View all orders from user
+@router.get("/users/{user_id}/orders", response_model=list[UserOrder]) # View all orders from user
 def view_orders(user_id: str, db = Depends(get_db)):
     return db_service.get_orders(user_id, db)
 
