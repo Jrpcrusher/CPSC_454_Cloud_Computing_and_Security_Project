@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends
 from ...services import db_service
 from app.api.deps import *
 from ...models.user import *
+from ...models.image import *
+from ...models.order import *
 
 router = APIRouter()
 
@@ -14,11 +16,11 @@ router = APIRouter()
 def view_me(user_id: str, db = Depends(get_db)):
     return db_service.view_me(user_id, db)
 
-@router.get("/me/settings", response_model=ViewSettings) # View yourself as user
+@router.get("/me/settings", response_model=Settings) # View yourself as user
 def view_settings(user_id: str, db = Depends(get_db)):
     return db_service.view_settings(user_id, db)
 
-@router.patch("/me/settings", response_model=ViewSettings) # Change values in settings
+@router.patch("/me/settings", response_model=Settings) # Change values in settings
 def change_settings(user_id: str, settings: Settings, db = Depends(get_db)):
     return db_service.change_settings(user_id, db)
 

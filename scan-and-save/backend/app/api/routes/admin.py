@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, Query
 from ...services import db_service
 from app.api.deps import *
 from ...models.user import *
+from ...models.image import *
+from ...models.order import *
 
 router = APIRouter()
 
