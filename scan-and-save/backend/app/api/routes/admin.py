@@ -29,8 +29,8 @@ def view_permissions(user_id: str, db = Depends(get_db)):
     return db_service.view_permissions(user_id, db)
 
 @router.patch("/users/{user_id}/permissions") # Method to elevate privileges
-def make_admin(user_id: str, db = Depends(get_db)):
-    return db_service.make_admin(user_id, db)
+def toggle_permission(user_id: str, db = Depends(get_db)):
+    return db_service.toggle_permission(user_id, db)
 
 # Images
 @router.get("/users/{user_id}/images", response_model=list[Image]) # View all images from user
