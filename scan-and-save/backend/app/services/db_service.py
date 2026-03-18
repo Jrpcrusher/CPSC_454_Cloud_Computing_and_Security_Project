@@ -1,72 +1,117 @@
 from bson import ObjectId
 from bson.errors import InvalidId
-from fastapi import Body, Request, Response, HTTPException, status
-from fastapi.encoders import jsonable_encoder
-from typing import List
+from fastapi import  HTTPException
 from app.models.user import *
 
 ################################################################
 # Handling user accounts, view all, view one, create one, delete one
 ################################################################
 
-def get_all_users(db): # Helper function that gets all the users from the database
-    users = list(db["users"].find())
-    for user in users:
-        user["id"] = str(user.pop("_id"))
-    return users # Return all the users
+# user issues
+def get_users(db):
+    users = list(db["user"].find({}, {"_id": 0}))
+    # TODO: add validation later
+    return users
 
 def get_user(user_id, db):
-    try: # Check to see if the user id even exists
-        oid = ObjectId(user_id)
-    except InvalidId:
-        raise HTTPException(status_code=400, detail="Invalid user id.")
-
-    user = db["users"].find_one({"_id": oid})
-
-    if not user: # if we dont find the user, then say user was not found
-        raise HTTPException(status_code=404, detail="User not found.")
-    
-    user["id"] = str(user.pop("_id"))
+    user = db["user"].find_one({"user_id": user_id})
+    # TODO: add validation later
     return user
 
 def delete_user(user_id, db):
-    try: # Check to see if the user id even exists
-        oid = ObjectId(user_id)
-    except InvalidId:
-        raise HTTPException(status_code=400, detail="Invalid user id.")
-    
-    deleted_user = db["users"].delete_one({"_id": oid})
+    user = db["user"].delete_one({"user_id": user_id})
+    # TODO: add validation later
+    return {"deleted user": user["user_id"]}
 
-    if deleted_user.deleted_count == 0: # if we dont find the user, then say user was not found
-        raise HTTPException(status_code=404, detail="User not found.")
+def view_permissions(user_id, db):
+    user = db["user"].find_one({"user_id": user_id})
+    # TODO: add validation later
+    return {"role": user["role"], "username": user["username"]}
 
-    return deleted_user.deleted_count
+def toggle_permission(user_id, db):
+    user = db["user"].find_one({"user_id": user_id})
+    # TODO: add validation later
+    return {"username": user["username"], "role": user["role"]}
 
-def change_role(user_id, db):
-    try: # Check to see if the user id even exists
-        oid = ObjectId(user_id)
-    except InvalidId:
-        raise HTTPException(status_code=400, detail="Invalid user id.")
-    user = db["users"].find_one({"_id": oid})
-    if not user: # if we dont find the user, then say user was not found
-        raise HTTPException(status_code=404, detail="User not found.")
-    
-    current_role = user.get("role","user")
-    new_role = "admin" if current_role == "user" else "user"
-
-    updated_user = db["users"].update_one(
-        {"_id": oid},
-        {"$set": {"role": new_role}}
+# image issues
+def get_images(user_id, db):
+    user = db["user"].find_one({"user_id": user_id})
+    # TODO: add validation later
+    return list(
+        db["image"].find(
+            {"artist.user_id": user_id},
+            {"_id": 0}
+        )
     )
 
-    if updated_user.matched_count == 0: # if we dont find the user, then say user was not found
-        raise HTTPException(status_code=404, detail="User not found.")
-    
-    return {"message": f"Role of user changed to {new_role}"}
-# ^^^ DONE ^^^
+def get_image(user_id, image_id, db):
+    user = db["user"].find_one({"user_id": user_id})
+    # TODO: add validation later
+    image = db["image"].find_one(
+        {
+            "artist.user_id": user_id,
+            "image_id": image_id
+        },
+        {"_id": 0}
+    )
+    return image
 
-def create_user(user: CreateUser):
-    
-    return None
+def delete_image(user_id, image_id, db):
+    user = db["user"].find_one({"user_id": user_id})
+    # TODO: add validation later
+    image = db["image"].delete_one(
+        {
+            "artist.user_id": user_id,
+            "image_id": image_id
+        },
+        {"_id": 0}
+    )
+    return {"deleted image": image["image_id"]}
+
+# order issues
+def get_orders(user_id, db):
+    user = db["user"].find_one({"user_id": user_id})
+    # TODO: add validation later
+    return list(
+        db["order"].find(
+            {"client.user_id": user_id},
+            {"_id": 0}
+        )
+    )
+
+def get_order(user_id, order_id, db):
+    user = db["user"].find_one({"user_id": user_id})
+    # TODO: add validation later
+    order = db["order"].find_one(
+        {
+            "client.user_id": user_id,
+            "order_id": order_id
+        },
+        {"_id": 0}
+    )
+    return {"deleted image": order["order_id"]}
+
+def delete_order(user_id, order_id, db):
+    user = db["user"].find_one({"user_id": user_id})
+    # TODO: add validation later
+    order = db["order"].delete_one(
+        {
+            "client.user_id": user_id,
+            "order_id": order_id
+        },
+        {"_id": 0}
+    )
+    return {"deleted image": order["order_id"]}
+
+# TODO:
+# create_order
+# search_users
+# get_profiles
+# get_profile
+# view_me
+# view_settings
+# change_settings
+# delete_me
+# create_user
 
 ################################################################
