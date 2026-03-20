@@ -1,2 +1,37 @@
-__pycache__/
+# ── Secrets (NEVER commit) ────────────────────────────
 .env
+.env.local
+.env.production
+.env*.local
+
+# ── VS Code local history (leaks file snapshots) ─────
+.history/
+
+# ── Python ────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+.venv/
+venv/
+env/
+
+# ── Node / Frontend ──────────────────────────────────
+node_modules/
+.next/
+.nuxt/
+
+# ── IDE / Editor ─────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ── Docker ────────────────────────────────────────────
+*.log
