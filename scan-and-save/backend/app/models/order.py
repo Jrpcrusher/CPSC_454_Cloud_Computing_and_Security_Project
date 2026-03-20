@@ -8,9 +8,8 @@ class Status(str, Enum):
     received = "received"
     in_progress = "in_progress"
     completed = "completed"
-    closed = "closed"
     cancelled = "cancelled"
-    awaiting_payment = "awaiting_payment"
+    declined = "declined"
 
 class Order(BaseModel): # Generic order model
     order_id: UUID
