@@ -8,7 +8,8 @@ from .api.__init__ import (
     authenticator_router,
     health_router,
     user_router,
-    home_router)
+    home_router,
+    payment_router)
 
 # This function creates a FastAPI instance
 def create_app():
@@ -28,6 +29,7 @@ def create_app():
     app.include_router(health_router, prefix="/health", tags=["health"])
     app.include_router(user_router, prefix="/user", tags=["user"])
     app.include_router(home_router, prefix="/home", tags=["home"])
+    app.include_router(payment_router, prefix="/payments", tags=["payments"])
 
     # attach the database on website start and close when shutdown
     @app.on_event("startup")

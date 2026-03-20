@@ -19,3 +19,4 @@ class Order(BaseModel): # Generic order model
     order_details: str
     creation_date: datetime
     status: Status
+    transaction_id: UUID | None = None  # Links to Transaction (set when buyer pays)
