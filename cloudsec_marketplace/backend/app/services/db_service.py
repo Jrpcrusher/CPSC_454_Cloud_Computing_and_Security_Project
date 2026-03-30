@@ -235,6 +235,6 @@ def create_order(artist_id : str, client_id : str, order_object, db):
 
     return order
 
-def change_settings(user_id, db):
+def change_settings(user_id, new_settings, db):
     return None
 ################################################################
