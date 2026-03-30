@@ -16,7 +16,7 @@ router = APIRouter()
 def view_users(db = Depends(get_db)):
     return db_service.get_users(db)
 
-@router.get("/users/search", response_model=list(UserProfileAdminView)) # Search for users
+@router.get("/users/search", response_model=list[UserProfileAdminView]) # Search for users
 def search_users(q: str = Query(..., min_length=1), db = Depends(get_db)):
     return db_service.search_users(q, db, include_private=True)
 

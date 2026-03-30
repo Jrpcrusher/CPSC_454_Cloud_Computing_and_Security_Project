@@ -1,4 +1,5 @@
-from pydantic_settings import BaseSettings
+from typing import ClassVar
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     MONGODB_URI: str
@@ -9,10 +10,10 @@ class Settings(BaseSettings):
     PLATFORM_FEE_PERCENT: float = 0.10         # Platform commission percentage (e.g. 10%)
     AWS_REGION: str | None = None               # We have the AWS region, or not
     SECRET_KEY: str # the key to hash with
-    ALGORITHM = "HS256" # Signing Algorithm we chose, HMAC + SHA-256
-    ACCESS_TOKEN_EXPIRE_MINUTES = 60 # How long our token is valid for
 
-    class Config:
-        env_file = ".env"
+    ALGORITHM: ClassVar[str] = "HS256" # Signing Algorithm we chose, HMAC + SHA-256
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 # How long our token is valid for
+
+    model_config = SettingsConfigDict(env_file=".env")
 
 settings = Settings()

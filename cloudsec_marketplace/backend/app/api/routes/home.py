@@ -8,7 +8,7 @@ from ...models.order import *
 router = APIRouter()
 
 # Search
-@router.get("/users/search", response_model=list(PublicProfile))
+@router.get("/users/search", response_model=list[PublicProfile])
 def search_users(q: str = Query(..., min_length=1), db = Depends(get_db)):
     return db_service.search_users(q, db, include_private=False)
 
