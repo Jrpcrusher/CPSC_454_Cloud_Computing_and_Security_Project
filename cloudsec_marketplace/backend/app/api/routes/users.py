@@ -14,11 +14,11 @@ router = APIRouter()
 # user profile management
 @router.get("/me", response_model=ViewMe) # View yourself as user
 def view_me(current_user=Depends(get_current_user), db = Depends(get_db)):
-    return db_service.view_me(current_user.user_id, db)
+    return db_service.get_user(current_user.user_id, db)
 
 @router.get("/me/settings", response_model=Settings) # View yourself as user
 def view_settings(current_user=Depends(get_current_user), db = Depends(get_db)):
-    return db_service.view_settings(current_user.user_id, db)
+    return db_service.get_user(current_user.user_id, db)
 
 @router.patch("/me/settings", response_model=Settings) # Change values in settings
 def change_settings(current_user=Depends(get_current_user), db = Depends(get_db)):
@@ -26,7 +26,7 @@ def change_settings(current_user=Depends(get_current_user), db = Depends(get_db)
 
 @router.delete("/me") # Delete yourself as user
 def delete_me(current_user=Depends(get_current_user), db = Depends(get_db)):
-    return db_service.delete_me(current_user.user_id, db)
+    return db_service.delete_user(current_user.user_id, db)
 
 # Images
 @router.get("/me/images", response_model=list[Image]) # View all your images

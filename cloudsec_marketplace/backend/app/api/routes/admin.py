@@ -16,6 +16,11 @@ router = APIRouter()
 def view_users(db = Depends(get_db)):
     return db_service.get_users(db)
 
+@router.get("/users/search", response_model=list(UserProfileAdminView)) # Search for users
+def search_users(q: str = Query(..., min_length=1), db = Depends(get_db)):
+    return db_service.search_users(q, db, include_private=True)
+
+
 @router.get("/users/{user_id}", response_model=UserProfileAdminView) # View single user profile (admin view)
 def view_user(user_id : str, db = Depends(get_db)):
     return db_service.get_user(user_id, db)
@@ -57,10 +62,5 @@ def view_order(user_id: str, order_id: str, db = Depends(get_db)):
 @router.delete("/users/{user_id}/orders/{order_id}") # Method to delete single order from user
 def delete_order(user_id: str, order_id: str, db = Depends(get_db)):
     return db_service.delete_order(user_id, order_id, db)
-
-# Search
-@router.get("/users/search")
-def search_users(q: str = Query(..., min_length=1), db = Depends(get_db)):
-    return db_service.search_users(q, db)
 
 # Reports (Opttional later thing)
