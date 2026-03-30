@@ -234,7 +234,52 @@ def create_order(artist_id : str, client_id : str, order_object, db):
     db["order"].insert_one(order)
 
     return order
-
+'''
+class Settings(BaseModel): # For viewing settings
+    username: str = Field(min_length=3, max_length=30)
+    email: EmailStr
+    pfp_path: str | None
+    description: str | None = Field(max_length=500)
+    '''
 def change_settings(user_id, new_settings, db):
-    return None
+    user = db["user"].find_one({"user_id": user_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="Artist not found")
+    
+    updated_settings = new_settings.model_dump(exclude_unset=True)
+
+    if not updated_settings: # if nothing, then return the original stuff
+        return {
+            "username": user["username"],
+            "email": user["email"],
+            "pfp_path": user.get("pfp_path"),
+            "description": user.get("description"),
+        }
+    
+    # The following is a series of checks, for username, email, pfp, and description change
+
+    if "username" in updated_settings: # check if username already exists, if so, give a vague error
+        existing_username = db["user"].find_one({
+            "username": updated_settings["username"],
+            "user_id": {"$ne": user_id},
+        })
+        if existing_username:
+            raise HTTPException(status_code=400, detail="Error occured, try another username")
+        
+    if "email" in updated_settings: # Check if the email is already in use, if so, give a vague error
+        existing_email = db["user"].find_one({
+            "email": updated_settings["email"],
+            "user_id": {"$ne": user_id},
+        })
+        if existing_email:
+            raise HTTPException(status_code=400, detail="Error occured, try another email")
+        
+    if updated_settings: # Actually update the settings
+        db["user"].update_one(
+            {"user_id": user_id},
+            {"$set": updated_settings}
+        )
+
+    updated_user = db["user"].find_one({"user_id": user_id}, {"_id": 0}) # return the updated settings
+    return updated_user
 ################################################################
