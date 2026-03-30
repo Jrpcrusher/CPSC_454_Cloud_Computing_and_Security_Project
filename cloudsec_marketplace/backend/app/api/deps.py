@@ -10,18 +10,19 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 def get_db(request: Request):
     return request.app.database
 
-def get_current_user(token: str = Depends(oauth2_scheme), db=Depends(get_db)):
-    payload = decode_token(token)
+def get_current_user(token: str = Depends(oauth2_scheme), db = Depends(get_db)):
+    try:
+        payload = decode_token(token)
+    except Exception: # Check and see if the token has expired
+        raise HTTPException(status_code=401, detail="Invalid token")
+    
     user_id = payload.get("user_id")
-
     if not user_id:
-        raise HTTPException(status_code=401, detail="Invalid Token")
+        raise HTTPException(status_code=401, detail="Invalid token")
     
     user = db_service.get_user(user_id, db)
-
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
-    
     return user
 
 def create_access_token(data: dict):
