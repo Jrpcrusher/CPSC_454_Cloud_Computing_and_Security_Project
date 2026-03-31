@@ -29,5 +29,5 @@ def login(login_request: LoginRequest, db = Depends(get_db)):
     }
 
 @router.post("/logout") # Handles the user logging out of their account
-def logout():
+def logout(current_user=Depends(get_current_user)):
     return {"status": "logout_success"}

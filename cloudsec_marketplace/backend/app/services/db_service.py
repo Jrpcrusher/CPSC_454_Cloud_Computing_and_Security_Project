@@ -36,7 +36,7 @@ def delete_user(user_id, db):
         ]
     })
     db["image"].delete_many({"artist.user_id": user_id})
-    return {"deleted user": user["user_id"]}
+    return {"deleted_user": user["user_id"]}
 
 def view_permissions(user_id, db):
     user = db["user"].find_one({"user_id": user_id}, {"_id": 0})
