@@ -33,4 +33,4 @@ def get_image(user_id: str, image_id: str, db = Depends(get_db)):
 # Request
 @router.post("/profiles/{user_id}/request", response_model=Order)
 def create_order(user_id: str, commission_request: CreateOrderRequest, current_user = Depends(get_current_user), db = Depends(get_db)):
-    return db_service.create_order(user_id, current_user.user_id, commission_request, db)
+    return db_service.create_order(user_id, current_user["user_id"], commission_request, db)
