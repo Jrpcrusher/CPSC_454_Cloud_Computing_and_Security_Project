@@ -173,12 +173,12 @@ def create_user(user, db):
 def get_credentials(request, db):
     user = db["user"].find_one({"email": request.email}) # try to find the user via email
     if not user: # if the user doesnt exist, fail immediately
-        return 0
+        return None
     try: # Try to verify password
         ph.verify(user["passwordHash"], request.password)
-        return 1
+        return user
     except VerifyMismatchError: # If fail, login fail
-        return 0
+        return None
         
 def search_users(query, db, include_private: bool = False):
     safe_query = re.escape(query)
