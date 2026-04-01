@@ -85,14 +85,14 @@ def user_images(test_db, registered_user):
 
 @pytest.fixture # Fixture to add images to user
 def user_orders(test_db, registered_user):
-    artist = {
+    client = {
         "user_id": registered_user["user_id"],
         "email": registered_user["email"],
         "username": registered_user["username"],
         "pfp_path": None
     }
 
-    client = {
+    artist = {
         "user_id": "3f7a9b2c-6d4e-4a1f-8c2b-5e9d7f0a1bdd",
         "email": "client@example.com",
         "username": "client",

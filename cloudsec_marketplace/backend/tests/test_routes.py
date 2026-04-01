@@ -242,29 +242,29 @@ def test_get_user_orders(client, user_orders, registered_user, auth_headers):
     second = data[1]
 
     assert first["order_id"] == user_orders[0]["order_id"]
-    assert first["artist"]["user_id"] == registered_user["user_id"]
+    assert first["client"]["user_id"] == registered_user["user_id"]
 
     assert second["order_id"] == user_orders[1]["order_id"]
-    assert second["artist"]["user_id"] == registered_user["user_id"]
+    assert second["client"]["user_id"] == registered_user["user_id"]
 
 def test_get_specific_order(client, user_orders, registered_user, auth_headers):
     order_id = user_orders[0]["order_id"]
-    response = client.get(f"/user/me/images/{order_id}", headers=auth_headers)
+    response = client.get(f"/user/me/orders/{order_id}", headers=auth_headers)
 
     assert response.status_code == 200
     data = response.json()
 
-    assert data["deleted_order"] == order_id
-    assert data["artist"]["user_id"] == registered_user["user_id"]
+    assert data["order_id"] == order_id
+    assert data["client"]["user_id"] == registered_user["user_id"]
 
 def test_delete_specific_order(client, user_orders, auth_headers):
     order_id = user_orders[0]["order_id"]
-    response = client.delete(f"/user/me/images/{order_id}", headers=auth_headers)
+    response = client.delete(f"/user/me/orders/{order_id}", headers=auth_headers)
 
     assert response.status_code == 200
 
     # Test to see if we can now get it
-    delete_check = client.get(f"/user/me/images/{order_id}", headers=auth_headers)
+    delete_check = client.get(f"/user/me/orders/{order_id}", headers=auth_headers)
     assert delete_check.status_code == 404
 
     data = response.json()
