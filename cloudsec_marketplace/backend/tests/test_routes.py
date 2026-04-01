@@ -1,7 +1,6 @@
 # /auth/register Tests
 # * Test 1:     Test Register Route (Register new account)
 # * Test 2:     Test Register Route (Create account with same email or username)
-
 def test_register_route(client, user_payload):
     response = client.post("/auth/register", json=user_payload)
 
@@ -20,7 +19,6 @@ def test_register_route_duplicate(client, user_payload):
 # /auth/login Tests
 # * Test 1:     Test Login Route (Invalid Login credentials fails)
 # * Test 2:     Test Login Route (Invalid Login credentials passes)
-
 def test_login_route_fail(client, registered_user):
 
     wrong_email = "wrongemail@example.com"
@@ -50,7 +48,6 @@ def test_login_route_success(client, registered_user):
 
 # /auth/logout Tests
 # * Test 1:     Test Logout Route (Logout success)
-
 def test_logout_route_success(client, auth_headers):
     logout_response = client.post("/auth/logout", headers=auth_headers)
 
@@ -82,7 +79,6 @@ def test_delete_user_account(client, auth_headers):
 # * Test 3: Check if we can update our settings (no items)
 # * Test 4: Check if we can update our settings (many items)
 # * Test 5: Update username to existing username or email fail
-
 def test_get_settings(client, registered_user, auth_headers):
     response =  client.get("/user/me/settings", headers=auth_headers)
 
@@ -175,7 +171,6 @@ def test_change_existing_user_info(client, auth_headers):
 # * Test 2: Check if we can get a single user image
 # * Test 3: Check if we can delete a single user image
 # * Test 4: Check if delete non-existing image fail
-
 def test_get_user_images(client, user_images, registered_user, auth_headers):
 
     response = client.get("/user/me/images", headers=auth_headers)
@@ -228,7 +223,6 @@ def test_delete_image_not_found(client, auth_headers):
 # * Test 2: Check if we can get a single user order
 # * Test 3: Check if we can delete a single user order
 # * Test 4: Check if delete non-existing order
-
 def test_get_user_orders(client, user_orders, registered_user, auth_headers):
 
     response = client.get("/user/me/orders", headers=auth_headers)
