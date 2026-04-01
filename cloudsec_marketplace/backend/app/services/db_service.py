@@ -99,7 +99,7 @@ def delete_image(user_id, image_id, db):
     )
     if not image:
         raise HTTPException(status_code=404, detail="Image not found")
-    return {"deleted image": image["image_id"]}
+    return {"deleted_image": image["image_id"]}
 
 # order issues
 def get_orders(user_id, db):
@@ -142,7 +142,7 @@ def delete_order(user_id, order_id, db):
     )
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
-    return {"deleted order": order["order_id"]}
+    return {"deleted_order": order["order_id"]}
 
 def create_user(user, db):
     # Check if the username already exists and email
