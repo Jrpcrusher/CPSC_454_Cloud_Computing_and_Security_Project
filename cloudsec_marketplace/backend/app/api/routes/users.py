@@ -21,7 +21,7 @@ def view_settings(current_user=Depends(get_current_user), db = Depends(get_db)):
     return db_service.get_user(current_user["user_id"], db)
 
 @router.patch("/me/settings", response_model=Settings) # Change values in settings
-def change_settings(new_settings: Settings, current_user=Depends(get_current_user), db = Depends(get_db)):
+def change_settings(new_settings: UpdateSettings, current_user=Depends(get_current_user), db = Depends(get_db)):
     return db_service.change_settings(current_user["user_id"], new_settings, db)
 
 @router.delete("/me") # Delete yourself as user

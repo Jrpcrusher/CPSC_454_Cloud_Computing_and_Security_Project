@@ -29,6 +29,12 @@ class ViewMe(BaseModel): # For viewing own profile
     pfp_path: str | None = None
     description: str | None = Field(max_length=500)
 
+class UpdateSettings(BaseModel):
+    username: str | None = Field(default=None, min_length=3, max_length=30)
+    email: EmailStr | None = None
+    pfp_path: str | None = None
+    description: str | None = Field(default=None, max_length=500)
+
 class Settings(BaseModel): # For viewing settings
     username: str = Field(min_length=3, max_length=30)
     email: EmailStr
