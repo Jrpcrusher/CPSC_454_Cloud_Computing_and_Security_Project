@@ -1,21 +1,21 @@
 import os
-import uuid
 from typing import BinaryIO, Optional
 
 import boto3
 from botocore.exceptions import ClientError
+from dotenv import load_dotenv
+
+
+load_dotenv()
 
 
 class S3Service:
     """
-    Service layer for managing asset storage in AWS S3.
-
-    Supports:
-    - uploading original artwork
-    - uploading watermarked preview artwork
-    - checking whether an asset exists
-    - generating presigned download/view URLs
-    - deleting assets
+    S3 service for:
+    - user profile pictures
+    - user public showcase images
+    - private order images
+    - order image downloads
     """
 
     def __init__(self):
@@ -27,88 +27,29 @@ class S3Service:
 
         self.s3 = boto3.client("s3", region_name=self.region)
 
-    def _build_original_key(self, artist_id: str, image_id: str, filename: str) -> str:
-        ext = self._get_extension(filename)
-        return f"originals/{artist_id}/{image_id}{ext}"
-
-    def _build_preview_key(self, artist_id: str, image_id: str, filename: str) -> str:
-        ext = self._get_extension(filename)
-        return f"previews/{artist_id}/{image_id}_watermarked{ext}"
-
-    def _get_extension(self, filename: str) -> str:
+    def _normalize_extension(self, filename: str, default: str = ".png") -> str:
         _, ext = os.path.splitext(filename)
-        return ext.lower() if ext else ""
+        return ext.lower() if ext else default
 
-    def upload_original(
-        self,
-        file_obj: BinaryIO,
-        artist_id: str,
-        filename: str,
-        content_type: str,
-        image_id: Optional[str] = None,
-    ) -> dict:
-        """
-        Upload the original, protected artwork file to S3.
-        Returns metadata including the generated image_id and object key.
-        """
-        if image_id is None:
-            image_id = str(uuid.uuid4())
-
-        key = self._build_original_key(artist_id, image_id, filename)
-
-        self.s3.upload_fileobj(
-            Fileobj=file_obj,
-            Bucket=self.bucket_name,
-            Key=key,
-            ExtraArgs={
-                "ContentType": content_type,
-                "ServerSideEncryption": "AES256",
-            },
-        )
-
-        return {
-            "image_id": image_id,
-            "bucket": self.bucket_name,
-            "key": key,
-            "type": "original",
-        }
-
-    def upload_preview(
-        self,
-        file_obj: BinaryIO,
-        artist_id: str,
-        filename: str,
-        content_type: str,
-        image_id: str,
-    ) -> dict:
-        """
-        Upload the watermarked preview artwork file to S3.
-        Returns metadata including the S3 key.
-        """
-        key = self._build_preview_key(artist_id, image_id, filename)
-
-        self.s3.upload_fileobj(
-            Fileobj=file_obj,
-            Bucket=self.bucket_name,
-            Key=key,
-            ExtraArgs={
-                "ContentType": content_type,
-                "ServerSideEncryption": "AES256",
-            },
-        )
-
-        return {
-            "image_id": image_id,
-            "bucket": self.bucket_name,
-            "key": key,
-            "type": "preview",
-        }
+    def _upload_file(self, file_obj: BinaryIO, key: str, content_type: str) -> dict:
+        try:
+            self.s3.upload_fileobj(
+                Fileobj=file_obj,
+                Bucket=self.bucket_name,
+                Key=key,
+                ExtraArgs={
+                    "ContentType": content_type,
+                    "ServerSideEncryption": "AES256",
+                },
+            )
+            return {
+                "bucket": self.bucket_name,
+                "key": key,
+            }
+        except ClientError as e:
+            raise RuntimeError(f"Failed to upload file to S3: {str(e)}")
 
     def asset_exists(self, key: str) -> bool:
-        """
-        Check whether an S3 object exists.
-        Useful for escrow verification before release.
-        """
         try:
             self.s3.head_object(Bucket=self.bucket_name, Key=key)
             return True
@@ -118,11 +59,14 @@ class S3Service:
                 return False
             raise
 
+    def delete_asset(self, key: str) -> bool:
+        try:
+            self.s3.delete_object(Bucket=self.bucket_name, Key=key)
+            return True
+        except ClientError:
+            return False
+
     def get_presigned_download_url(self, key: str, expires_in: int = 300) -> str:
-        """
-        Generate a short-lived presigned URL for downloading a protected asset.
-        This is what you would use to release the unwatermarked original after payment.
-        """
         try:
             return self.s3.generate_presigned_url(
                 ClientMethod="get_object",
@@ -132,18 +76,107 @@ class S3Service:
         except ClientError as e:
             raise RuntimeError(f"Could not generate presigned download URL: {str(e)}")
 
-    def delete_asset(self, key: str) -> bool:
-        """
-        Delete an object from S3.
-        """
+
+    # Path builders
+
+    def get_pfp_key(self, user_id: str, extension: str = ".png") -> str:
+        return f"users/{user_id}/pfp/current{extension}"
+
+    def get_user_image_key(self, user_id: str, image_id: str, extension: str = ".png") -> str:
+        return f"users/{user_id}/images/{image_id}{extension}"
+
+    def get_order_image_key(self, order_id: str, file_name: str) -> str:
+        return f"orders/{order_id}/{file_name}"
+
+
+    # Profile picture functions
+
+    def upload_pfp(
+        self,
+        file_obj: BinaryIO,
+        user_id: str,
+        filename: str = "current.png",
+        content_type: str = "image/png",
+    ) -> dict:
+        ext = self._normalize_extension(filename, default=".png")
+        key = self.get_pfp_key(user_id, ext)
+        result = self._upload_file(file_obj, key, content_type)
+        result["type"] = "pfp"
+        return result
+
+    def get_pfp(self, user_id: str, expires_in: int = 300) -> Optional[str]:
+        png_key = self.get_pfp_key(user_id, ".png")
+        jpg_key = self.get_pfp_key(user_id, ".jpg")
+        jpeg_key = self.get_pfp_key(user_id, ".jpeg")
+
+        for key in (png_key, jpg_key, jpeg_key):
+            if self.asset_exists(key):
+                return self.get_presigned_download_url(key, expires_in=expires_in)
+
+        return None
+
+    # User public showcase images
+
+
+    def upload_user_public_image(
+        self,
+        file_obj: BinaryIO,
+        user_id: str,
+        image_id: str,
+        filename: str,
+        content_type: str,
+    ) -> dict:
+        ext = self._normalize_extension(filename, default=".png")
+        key = self.get_user_image_key(user_id, image_id, ext)
+        result = self._upload_file(file_obj, key, content_type)
+        result["type"] = "user_public_image"
+        result["image_id"] = image_id
+        return result
+
+    def get_user_public_images(self, user_id: str) -> list[dict]:
+        prefix = f"users/{user_id}/images/"
         try:
-            self.s3.delete_object(Bucket=self.bucket_name, Key=key)
-            return True
-        except ClientError:
-            return False
+            response = self.s3.list_objects_v2(
+                Bucket=self.bucket_name,
+                Prefix=prefix,
+            )
 
-    def get_original_key(self, artist_id: str, image_id: str, filename: str) -> str:
-        return self._build_original_key(artist_id, image_id, filename)
+            contents = response.get("Contents", [])
+            results = []
 
-    def get_preview_key(self, artist_id: str, image_id: str, filename: str) -> str:
-        return self._build_preview_key(artist_id, image_id, filename)
+            for obj in contents:
+                key = obj["Key"]
+                results.append(
+                    {
+                        "key": key,
+                        "url": self.get_presigned_download_url(key),
+                    }
+                )
+
+            return results
+        except ClientError as e:
+            raise RuntimeError(f"Could not list user public images: {str(e)}")
+
+    # Private order images
+
+    def upload_order_image(
+        self,
+        file_obj: BinaryIO,
+        order_id: str,
+        file_name: str,
+        content_type: str,
+    ) -> dict:
+        key = self.get_order_image_key(order_id, file_name)
+        result = self._upload_file(file_obj, key, content_type)
+        result["type"] = "order_image"
+        result["order_id"] = order_id
+        result["file_name"] = file_name
+        return result
+
+    def download_order_image(self, order_id: str, file_name: str, expires_in: int = 300) -> str:
+        key = self.get_order_image_key(order_id, file_name)
+
+        if not self.asset_exists(key):
+            raise FileNotFoundError(f"Order image not found for key: {key}")
+
+        return self.get_presigned_download_url(key, expires_in=expires_in)
