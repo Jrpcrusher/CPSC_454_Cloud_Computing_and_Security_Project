@@ -6,6 +6,15 @@ from ...models.image import *
 from ...models.order import *
 
 router = APIRouter()
+"""
+Endpoints:
+  GET   /home/users/search
+  GET   /home/profiles
+  GET   /home/profiles/{user_id}
+  GET   /home/profiles/{user_id}/images
+  GET   /home/profiles/{user_id}/images/{image_id}
+  POST  /home/profiles/{user_id}/request
+"""
 
 # Search
 @router.get("/users/search", response_model=list[PublicProfile])

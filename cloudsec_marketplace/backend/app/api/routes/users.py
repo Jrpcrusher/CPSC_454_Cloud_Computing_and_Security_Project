@@ -6,7 +6,21 @@ from ...models.image import *
 from ...models.order import *
 
 router = APIRouter()
-
+"""
+Endpoints:
+  GET    /user/me
+  DELETE /user/me
+  GET    /user/me/settings
+  PATCH  /user/me/settings
+  GET    /user/me/images
+  GET    /user/me/images/{image_id}
+  DELETE /user/me/images/{image_id}
+  POST   /user/me/images/upload
+  GET    /user/me/order/client
+  GET    /user/me/order/artist
+  GET    /user/me/order/{order_id}
+  DELETE /user/me/order/{order_id}
+"""
 ############################################
 # User routes possible
 ############################################
@@ -61,3 +75,23 @@ def view_order(order_id: str, current_user=Depends(get_current_user), db = Depen
 @router.delete("/me/orders/{order_id}") # Delete single order
 def delete_order(order_id: str, current_user=Depends(get_current_user), db = Depends(get_db)):
     return db_service.delete_order(current_user["user_id"], order_id, db)
+
+@router.post("/me/orders/{order_id}/accept")
+def accept_order(order_id: str, current_user=Depends(get_current_user), db = Depends(get_db)):
+    return db_service.accept_order(order_id, current_user["user_id"], db)
+
+@router.post("/me/orders/{order_id}/decline")
+def decline_order(order_id: str, current_user=Depends(get_current_user), db = Depends(get_db)):
+    return db_service.decline_order(order_id, current_user["user_id"], db)
+
+@router.post("/me/orders/{order_id}/upload", response_model=Image)
+def upload_image(uploaded_image: Image, order_id: str, current_user=Depends(get_current_user), db = Depends(get_db)):
+    return db_service.upload_order_image(uploaded_image, order_id, current_user["user_id"], db)
+
+@router.get("/me/orders/{order_id}/download")
+def download_image(order_id: str, current_user=Depends(get_current_user), db = Depends(get_db)):
+    return db_service.download_image(order_id, current_user["user_id"], db)
+
+@router.post("/me/orders/{order_id}/approve")
+def approve_order(order_id: str, current_user=Depends(get_current_user), db = Depends(get_db)):
+    return db_service.approve_order(order_id, current_user["user_id"], db)
