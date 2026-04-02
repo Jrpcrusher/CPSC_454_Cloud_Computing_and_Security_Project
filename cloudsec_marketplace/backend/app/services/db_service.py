@@ -236,13 +236,7 @@ def create_order(artist_id : str, client_id : str, order_object, db):
     db["order"].insert_one(order)
 
     return order
-'''
-class Settings(BaseModel): # For viewing settings
-    username: str = Field(min_length=3, max_length=30)
-    email: EmailStr
-    pfp_path: str | None
-    description: str | None = Field(max_length=500)
-    '''
+
 def change_settings(user_id, new_settings, db):
     user = db["user"].find_one({"user_id": user_id})
     if not user:
@@ -284,4 +278,26 @@ def change_settings(user_id, new_settings, db):
 
     updated_user = db["user"].find_one({"user_id": user_id}, {"_id": 0}) # return the updated settings
     return updated_user
+
+def upload_image(new_image, user_id, db):
+    user = db["user"].find_one({"user_id": user_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    artist = { # get the information about the artist
+        "user_id": user["user_id"],
+        "username": user["username"],
+        "email": user["email"],
+        "pfp_path": user["pfp_path"]
+    }
+
+    image = {
+        "image_id": str(uuid.uuid4()),
+        "image_path": new_image.image_path,
+        "artist": artist,
+        "upload_date": datetime.now(timezone.utc),
+        "description": new_image.description
+    }
+    db["image"].insert_one(image)
+
+    return image
 ################################################################

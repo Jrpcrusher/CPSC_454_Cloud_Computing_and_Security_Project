@@ -9,3 +9,7 @@ class Image(BaseModel): # Generic image model
     artist: UserSummary
     upload_date: datetime
     description: str | None = Field(max_length=500)
+
+class UploadImage(BaseModel):
+    image_path: str
+    description: str | None = Field(default=None, max_length=500)

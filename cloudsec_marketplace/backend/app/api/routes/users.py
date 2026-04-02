@@ -29,10 +29,9 @@ def delete_me(current_user=Depends(get_current_user), db = Depends(get_db)):
     return db_service.delete_user(current_user["user_id"], db)
 
 # Images
-# TODO: Make a route to upload an image
-@router.post("/me/images/upload")
-def upload_image(new_image: Image, current_user=Depends(get_current_user), db = Depends(get_db)):
-    return db_service.upload_image(new_image, current_user, db)
+@router.post("/me/images/upload", response_model=Image)
+def upload_image(new_image: UploadImage, current_user=Depends(get_current_user), db = Depends(get_db)):
+    return db_service.upload_image(new_image, current_user["user_id"], db)
 
 @router.get("/me/images", response_model=list[Image]) # View all your images
 def view_images(current_user=Depends(get_current_user), db = Depends(get_db)):
