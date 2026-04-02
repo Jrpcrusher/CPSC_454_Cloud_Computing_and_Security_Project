@@ -30,6 +30,10 @@ def delete_me(current_user=Depends(get_current_user), db = Depends(get_db)):
 
 # Images
 # TODO: Make a route to upload an image
+@router.post("/me/images/upload")
+def upload_image(new_image: Image, current_user=Depends(get_current_user), db = Depends(get_db)):
+    return db_service.upload_image(new_image, current_user, db)
+
 @router.get("/me/images", response_model=list[Image]) # View all your images
 def view_images(current_user=Depends(get_current_user), db = Depends(get_db)):
     return db_service.get_images(current_user["user_id"], db)
@@ -43,12 +47,13 @@ def delete_image(image_id: str, current_user=Depends(get_current_user), db = Dep
     return db_service.delete_image(current_user["user_id"], image_id, db)
 
 # Orders
-# TODO: Make this function, into two separate ones:
-# orders/client
-# orders/artist
-@router.get("/me/orders", response_model=list[Order]) # View your orders
+@router.get("/me/orders/client", response_model=list[Order]) # View your orders
 def view_orders(current_user=Depends(get_current_user), db = Depends(get_db)):
-    return db_service.get_orders(current_user["user_id"], db)
+    return db_service.get_orders(current_user["user_id"], "client", db)
+
+@router.get("/me/orders/artist", response_model=list[Order]) # View your orders
+def view_orders(current_user=Depends(get_current_user), db = Depends(get_db)):
+    return db_service.get_orders(current_user["user_id"], "artist", db)
 
 @router.get("/me/orders/{order_id}", response_model=Order) # View single order
 def view_order(order_id: str, current_user=Depends(get_current_user), db = Depends(get_db)):

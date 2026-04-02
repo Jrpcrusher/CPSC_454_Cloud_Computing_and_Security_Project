@@ -102,13 +102,15 @@ def delete_image(user_id, image_id, db):
     return {"deleted_image": image["image_id"]}
 
 # order issues
-def get_orders(user_id, db):
+def get_orders(user_id, role, db):
     user = db["user"].find_one({"user_id": user_id})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    
+    query = {f"{role}.user_id": user_id}
     return list(
         db["order"].find(
-            {"client.user_id": user_id},
+            {query},
             {"_id": 0}
         )
     )
