@@ -17,7 +17,7 @@ class PublicProfile(BaseModel): # Return a users public profile
     username: str = Field(min_length=3, max_length=30)
     register_date: datetime
     role: UserRole
-    pfp_path: str | None = None
+    pfp_key: str | None = None
     description: str | None = Field(max_length=500)
 
 class ViewMe(BaseModel): # For viewing own profile
@@ -26,19 +26,19 @@ class ViewMe(BaseModel): # For viewing own profile
     email: EmailStr
     register_date: datetime
     role: UserRole
-    pfp_path: str | None = None
+    pfp_key: str | None = None
     description: str | None = Field(max_length=500)
 
 class UpdateSettings(BaseModel): # What is needed for updating settings
     username: str | None = Field(default=None, min_length=3, max_length=30)
     email: EmailStr | None = None
-    pfp_path: str | None = None
+    pfp_key: str | None = None
     description: str | None = Field(default=None, max_length=500)
 
 class Settings(BaseModel): # For viewing settings
     username: str = Field(min_length=3, max_length=30)
     email: EmailStr
-    pfp_path: str | None
+    pfp_key: str | None
     description: str | None = Field(max_length=500)
 
 class UserProfileAdminView(BaseModel): # For viewing profile as admin
@@ -48,12 +48,12 @@ class UserProfileAdminView(BaseModel): # For viewing profile as admin
     register_date: datetime
     role: UserRole
     description: str | None = Field(max_length=500)
-    pfp_path: str | None = None
+    pfp_key: str | None = None
 
 class UserPermissions(BaseModel): # For viewing permissions of user
     username: str = Field(min_length=3, max_length=30)
     role: UserRole
-    pfp_path: str | None = None
+    pfp_key: str | None = None
 
 class LoginRequest(BaseModel): # For handling user login requests
     email: EmailStr
@@ -63,4 +63,4 @@ class UserSummary(BaseModel): # Information about the user
     email: EmailStr
     user_id: UUID
     username: str = Field(min_length=3, max_length=30)
-    pfp_path: str | None = None
+    pfp_key: str | None = None

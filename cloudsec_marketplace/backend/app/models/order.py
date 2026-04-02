@@ -31,18 +31,18 @@ class OrderApprovalResponse(BaseModel): # The response model for order, saying i
 
 class OrderDownloadResponse(BaseModel): # The resposne model for allowing the user to download (after happy)
     order_id: UUID
-    unwatermarked_path: str
+    unwatermarked_key: str
 
 class UploadOrderAsset(BaseModel): # The response model for artist uploading the asset (image)
-    unwatermarked_path: str
+    unwatermarked_key: str
 
 class OrderAsset(BaseModel): # The actual order with all image info, release info, and artist/client info
     order_id: UUID
     artist_id: UUID
     client_id: UUID
 
-    watermarked_path: str
-    unwatermarked_path: str
+    watermarked_key: str
+    unwatermarked_key: str
 
     art_uploaded: bool = False
     released_to_buyer: bool = False

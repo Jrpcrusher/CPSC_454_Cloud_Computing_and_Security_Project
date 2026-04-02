@@ -1,7 +1,7 @@
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
 from datetime import datetime, timezone
-from fastapi import  HTTPException
+from fastapi import  HTTPException, UploadFile
 from app.models.user import *
 import uuid
 import re
@@ -13,9 +13,6 @@ from ...watermark import watermark
 ################################################################
 
 ph = PasswordHasher()
-BASE_DIR = Path(__file__).resolve().parents[3]
-WATERMARK_PATH = BASE_DIR / "watermark" / "slime_watermark.png"
-OUTPUT_PATH = BASE_DIR / "watermark" / "test.png"
 
 # user issues
 def get_users(db):
@@ -112,6 +109,22 @@ def get_orders(user_id, role, db):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
+    if role not in {"admin", "client", "artist"}:
+        raise HTTPException(status_code=400, detail="Invalid role")
+
+    if role == "admin":
+        return list(
+            db["order"].find(
+                {
+                    "$or": [
+                        {"artist.user_id": user_id},
+                        {"client.user_id": user_id}
+                    ]
+                },
+                {"_id": 0}
+            )
+        )
+
     query = {f"{role}.user_id": user_id}
     return list(
         db["order"].find(
@@ -174,7 +187,7 @@ def create_user(user, db):
         "email": user.email,
         "register_date": datetime.now(timezone.utc),
         "role": UserRole.user,
-        "pfp_path": None,
+        "pfp_key": None,
         "description": None,
         "passwordHash": ph.hash(user.password)
     }
@@ -225,14 +238,14 @@ def create_order(artist_id : str, client_id : str, order_object, db):
         "user_id": client["user_id"],
         "username": client["username"],
         "email": client["email"],
-        "pfp_path": client["pfp_path"]
+        "pfp_key": client["pfp_key"]
     }
 
     artist_info = { # get the information about the artist
         "user_id": artist["user_id"],
         "username": artist["username"],
         "email": artist["email"],
-        "pfp_path": artist["pfp_path"]
+        "pfp_key": artist["pfp_key"]
     }
 
     order = {
@@ -259,7 +272,7 @@ def change_settings(user_id, new_settings, db):
         return {
             "username": user["username"],
             "email": user["email"],
-            "pfp_path": user.get("pfp_path"),
+            "pfp_key": user.get("pfp_key"),
             "description": user.get("description"),
         }
     
@@ -290,7 +303,7 @@ def change_settings(user_id, new_settings, db):
     updated_user = db["user"].find_one({"user_id": user_id}, {"_id": 0}) # return the updated settings
     return updated_user
 
-def upload_image(new_image, user_id, db):
+def upload_image(upload_file: UploadFile, description: str | None, user_id, db):
     user = db["user"].find_one({"user_id": user_id})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -298,15 +311,20 @@ def upload_image(new_image, user_id, db):
         "user_id": user["user_id"],
         "username": user["username"],
         "email": user["email"],
-        "pfp_path": user["pfp_path"]
+        "pfp_key": user["pfp_key"]
     }
 
+    image_id = str(uuid.uuid4())
+
+    # ! TODO: Replace this when S3 functions are finished
+    image_key = f"users/{user_id}/images/{image_id}_{upload_file.filename}"
+
     image = {
-        "image_id": str(uuid.uuid4()),
-        "image_path": new_image.image_path,
+        "image_id": image_id,
+        "image_key": image_key,
         "artist": artist,
         "upload_date": datetime.now(timezone.utc),
-        "description": new_image.description
+        "description": description
     }
     db["image"].insert_one(image)
 
@@ -358,7 +376,7 @@ def decline_order(order_id, user_id, db):
         raise HTTPException(status_code=400, detail="Order not found or cannot be accepted")
     return {"status": "declined"}
 
-def upload_order_image(uploaded_image, order_id, user_id, db):
+def upload_order_image(upload_file: UploadFile, order_id, user_id, db):
     user = db["user"].find_one({"user_id": user_id})
     if not user: # Make sure order exists
         raise HTTPException(status_code=404, detail="User not found")
@@ -372,12 +390,14 @@ def upload_order_image(uploaded_image, order_id, user_id, db):
     if order["status"] != "accepted":
         raise HTTPException(status_code=400, detail="Cannot upload to an unaccepted request")
     
+    unwatermarked_key = f"orders/{order_id}/images/{order_id}_{upload_file.filename}" # ! TODO: Replace this when s3_service function is done
+    watermarked_key = f"orders/{order_id}/images/{order_id}_{upload_file.filename}" # ! TODO: Replace this when s3_service function is done
     order_asset = {
         "order_id": order_id,
         "artist_id": order["artist"]["user_id"] ,
         "client_id": order["client"]["user_id"],
-        "unwatermarked_path": uploaded_image.unwatermarked_path,
-        "watermarked_path": watermark.full_watermark(uploaded_image.unwatermarked_path, str(WATERMARK_PATH), str(OUTPUT_PATH)), 
+        "unwatermarked_key": unwatermarked_key,
+        "watermarked_key": watermarked_key, 
         "art_uploaded": True,
         "released_to_buyer": False
     }
@@ -400,7 +420,7 @@ def download_image(order_id, user_id, db):
     
     order = db["order"].find_one({"order_id": order_id})
     if not order:
-        raise HTTPException(status_code=200, detail="Order not found")
+        raise HTTPException(status_code=404, detail="Order not found")
     
     order_asset = db["order_asset"].find_one({"order_id": order_id})
 
@@ -413,12 +433,12 @@ def download_image(order_id, user_id, db):
     if order_asset["released_to_buyer"] == False:
         raise HTTPException(status_code=403, detail="Not permitted to get art")
     
-    if order_asset["user_id"] != user_id:
+    if order_asset["client_id"] != user_id:
         raise HTTPException(status_code=403, detail="Only the client can download artwork")
-
+    
     order_image = {
         "order_id": order_id,
-        "unwatermarked_path": order_asset["unwatermarked_path"]
+        "unwatermarked_key": order_asset["unwatermarked_key"]
     }
 
     return order_image
@@ -428,7 +448,7 @@ def approve_order(order_id, user_id, db):
     if not user: # Make sure order exists
         raise HTTPException(status_code=404, detail="User not found")
     
-    order = db["user"].find_one({"order_id": order_id})
+    order = db["order"].find_one({"order_id": order_id})
     if not order: # Make sure order exists
         raise HTTPException(status_code=404, detail="Order not found")
     if order["status"] != "accepted": # Make sure order is accepted
@@ -442,7 +462,7 @@ def approve_order(order_id, user_id, db):
     elif order["artist"]["user_id"] == user_id: # Update if artist
         if order.get("artist_approval", False):
             raise HTTPException(status_code=400, detail="Artist already approved!")
-        update_fields["client_approval"] = True
+        update_fields["artist_approval"] = True
     else: # otherwise youre not allowed
         raise HTTPException(status_code=403, detail="Not authorized to approve.")
     
@@ -471,7 +491,7 @@ def release_image(order_id, user_id, db):
     if not order_asset:
         raise HTTPException(status_code=404, detail="Image not found")
     
-    if order_asset.get("art_uploaded", False):
+    if not order_asset.get("art_uploaded", False):
         raise HTTPException(status_code=400, detail="Art not uploaded")
     
     
@@ -486,6 +506,26 @@ def release_image(order_id, user_id, db):
     )
 
     updated_order_asset = db["order_asset"].find_one({"order_id": order_id}, {"_id": 0})
-    return updated_order_asset["unwatermarked_path"]
+    return updated_order_asset["unwatermarked_key"]
     
+def upload_profile_picture(upload_file: UploadFile, user_id, db):
+    user = db["user"].find_one({"user_id": user_id})
+    if not user: # Make sure order exists
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # ! TODO: Replace this when S3 is done and we can actually retrieve
+    pfp_key = f"users/{user_id}/pfp/current.png"
+
+    db["user"].update_one(
+        {"user_id": user_id},
+        {"$set": {"pfp_key": pfp_key}}
+    )
+
+    return {
+        "username": user["username"],
+        "email": user["email"],
+        "pfp_key": pfp_key,
+        "description": user["description"]
+    }
+
 ################################################################

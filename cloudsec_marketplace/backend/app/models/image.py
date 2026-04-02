@@ -5,11 +5,10 @@ from uuid import UUID
 
 class Image(BaseModel): # Generic image model
     image_id: UUID
-    image_path: str
+    image_key: str
     artist: UserSummary
     upload_date: datetime
     description: str | None = Field(max_length=500)
 
 class UploadImage(BaseModel):
-    image_path: str
     description: str | None = Field(default=None, max_length=500)
