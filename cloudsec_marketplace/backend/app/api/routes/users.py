@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, UploadFile, File, Form
 from ...services import db_service
 from app.api.deps import *
 from ...models.user import *
@@ -12,6 +12,7 @@ Endpoints:
   DELETE /user/me
   GET    /user/me/settings
   PATCH  /user/me/settings
+  POST   /user/me/settings/pfp
   GET    /user/me/images
   GET    /user/me/images/{image_id}
   DELETE /user/me/images/{image_id}
@@ -38,14 +39,18 @@ def view_settings(current_user=Depends(get_current_user), db = Depends(get_db)):
 def change_settings(new_settings: UpdateSettings, current_user=Depends(get_current_user), db = Depends(get_db)):
     return db_service.change_settings(current_user["user_id"], new_settings, db)
 
+@router.post("/me/settings/pfp", response_model=Settings)
+def upload_profile_picture(image: UploadFile = File(...), current_user=Depends(get_current_user), db = Depends(get_db)):
+    return db_service.upload_profile_picture(image, current_user["user_id"], db)
+
 @router.delete("/me") # Delete yourself as user
 def delete_me(current_user=Depends(get_current_user), db = Depends(get_db)):
     return db_service.delete_user(current_user["user_id"], db)
 
 # Images
 @router.post("/me/images/upload", response_model=Image)
-def upload_image(new_image: UploadImage, current_user=Depends(get_current_user), db = Depends(get_db)):
-    return db_service.upload_image(new_image, current_user["user_id"], db)
+def upload_image(image: UploadFile = File(...), description: str | None = Form(default=None), current_user=Depends(get_current_user), db = Depends(get_db)):
+    return db_service.upload_image(image, description, current_user["user_id"], db)
 
 @router.get("/me/images", response_model=list[Image]) # View all your images
 def view_images(current_user=Depends(get_current_user), db = Depends(get_db)):
@@ -61,11 +66,11 @@ def delete_image(image_id: str, current_user=Depends(get_current_user), db = Dep
 
 # Orders
 @router.get("/me/orders/client", response_model=list[Order]) # View your orders
-def view_orders(current_user=Depends(get_current_user), db = Depends(get_db)):
+def view_orders_as_client(current_user=Depends(get_current_user), db = Depends(get_db)):
     return db_service.get_orders(current_user["user_id"], "client", db)
 
 @router.get("/me/orders/artist", response_model=list[Order]) # View your orders
-def view_orders(current_user=Depends(get_current_user), db = Depends(get_db)):
+def view_orders_as_artist(current_user=Depends(get_current_user), db = Depends(get_db)):
     return db_service.get_orders(current_user["user_id"], "artist", db)
 
 @router.get("/me/orders/{order_id}", response_model=Order) # View single order
@@ -85,8 +90,8 @@ def decline_order(order_id: str, current_user=Depends(get_current_user), db = De
     return db_service.decline_order(order_id, current_user["user_id"], db)
 
 @router.post("/me/orders/{order_id}/upload", response_model=OrderAsset)
-def upload_image(uploaded_image: UploadOrderAsset, order_id: str, current_user=Depends(get_current_user), db = Depends(get_db)):
-    return db_service.upload_order_image(uploaded_image, order_id, current_user["user_id"], db)
+def upload_order_image(order_id: str, image: UploadFile = File(...), current_user=Depends(get_current_user), db = Depends(get_db)):
+    return db_service.upload_order_image(image, order_id, current_user["user_id"], db)
 
 @router.get("/me/orders/{order_id}/download", response_model=OrderDownloadResponse)
 def download_image(order_id: str, current_user=Depends(get_current_user), db = Depends(get_db)):

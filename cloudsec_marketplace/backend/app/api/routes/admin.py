@@ -55,7 +55,7 @@ def delete_image(user_id: str, image_id: str, db = Depends(get_db)):
 # Orders
 @router.get("/users/{user_id}/orders", response_model=list[Order]) # View all orders from user
 def view_orders(user_id: str, db = Depends(get_db)):
-    return db_service.get_orders(user_id, db)
+    return db_service.get_orders(user_id, "admin", db)
 
 @router.get("/users/{user_id}/orders/{order_id}", response_model=Order) # View single order from user
 def view_order(user_id: str, order_id: str, db = Depends(get_db)):
