@@ -5,7 +5,9 @@ from ...models.user import *
 from ...models.image import *
 from ...models.order import *
 
-router = APIRouter()
+router = APIRouter(
+    dependencies=[Depends(get_current_admin)]
+)
 
 ############################################
 # Admin routes possible
