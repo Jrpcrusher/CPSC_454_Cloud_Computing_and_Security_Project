@@ -33,9 +33,6 @@ class OrderDownloadResponse(BaseModel): # The resposne model for allowing the us
     order_id: UUID
     unwatermarked_key: str
 
-class UploadOrderAsset(BaseModel): # The response model for artist uploading the asset (image)
-    unwatermarked_key: str
-
 class OrderAsset(BaseModel): # The actual order with all image info, release info, and artist/client info
     order_id: UUID
     artist_id: UUID
