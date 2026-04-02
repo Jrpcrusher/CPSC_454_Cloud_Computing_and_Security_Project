@@ -6,10 +6,9 @@ from enum import Enum
 
 class Status(str, Enum):
     received = "received"
-    in_progress = "in_progress"
-    completed = "completed"
-    cancelled = "cancelled"
     declined = "declined"
+    accepted = "accepted"
+    completed = "completed"
 
 class Order(BaseModel): # Generic order model
     order_id: UUID
