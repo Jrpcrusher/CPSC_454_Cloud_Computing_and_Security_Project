@@ -110,7 +110,7 @@ def get_orders(user_id, role, db):
     query = {f"{role}.user_id": user_id}
     return list(
         db["order"].find(
-            {query},
+            query,
             {"_id": 0}
         )
     )
@@ -121,8 +121,11 @@ def get_order(user_id, order_id, db):
         raise HTTPException(status_code=404, detail="User not found")
     order = db["order"].find_one(
         {
-            "client.user_id": user_id,
-            "order_id": order_id
+            "order_id": order_id,
+            "$or": [
+                {"client.user_id": user_id},
+                {"artist.user_id": user_id}
+            ]
         },
         {"_id": 0}
     )
@@ -137,8 +140,11 @@ def delete_order(user_id, order_id, db):
         raise HTTPException(status_code=404, detail="User not found")
     order = db["order"].find_one_and_delete(
         {
-            "client.user_id": user_id,
-            "order_id": order_id
+            "order_id": order_id,
+            "$or": [
+                {"client.user_id": user_id},
+                {"artist.user_id": user_id}
+            ]
         },
         {"_id": 0}
     )
