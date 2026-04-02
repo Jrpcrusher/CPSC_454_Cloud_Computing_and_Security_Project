@@ -29,7 +29,7 @@ class ViewMe(BaseModel): # For viewing own profile
     pfp_path: str | None = None
     description: str | None = Field(max_length=500)
 
-class UpdateSettings(BaseModel):
+class UpdateSettings(BaseModel): # What is needed for updating settings
     username: str | None = Field(default=None, min_length=3, max_length=30)
     email: EmailStr | None = None
     pfp_path: str | None = None
@@ -59,7 +59,7 @@ class LoginRequest(BaseModel): # For handling user login requests
     email: EmailStr
     password: str = Field(min_length=12, max_length=128)
 
-class UserSummary(BaseModel):
+class UserSummary(BaseModel): # Information about the user
     email: EmailStr
     user_id: UUID
     username: str = Field(min_length=3, max_length=30)

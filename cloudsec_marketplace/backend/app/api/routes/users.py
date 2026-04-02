@@ -76,22 +76,25 @@ def view_order(order_id: str, current_user=Depends(get_current_user), db = Depen
 def delete_order(order_id: str, current_user=Depends(get_current_user), db = Depends(get_db)):
     return db_service.delete_order(current_user["user_id"], order_id, db)
 
-@router.post("/me/orders/{order_id}/accept")
+@router.patch("/me/orders/{order_id}/accept")
 def accept_order(order_id: str, current_user=Depends(get_current_user), db = Depends(get_db)):
     return db_service.accept_order(order_id, current_user["user_id"], db)
 
-@router.post("/me/orders/{order_id}/decline")
+@router.patch("/me/orders/{order_id}/decline")
 def decline_order(order_id: str, current_user=Depends(get_current_user), db = Depends(get_db)):
     return db_service.decline_order(order_id, current_user["user_id"], db)
 
-@router.post("/me/orders/{order_id}/upload", response_model=Image)
-def upload_image(uploaded_image: Image, order_id: str, current_user=Depends(get_current_user), db = Depends(get_db)):
+@router.post("/me/orders/{order_id}/upload", response_model=OrderAsset)
+def upload_image(uploaded_image: UploadOrderAsset, order_id: str, current_user=Depends(get_current_user), db = Depends(get_db)):
     return db_service.upload_order_image(uploaded_image, order_id, current_user["user_id"], db)
 
-@router.get("/me/orders/{order_id}/download")
+@router.get("/me/orders/{order_id}/download", response_model=OrderDownloadResponse)
 def download_image(order_id: str, current_user=Depends(get_current_user), db = Depends(get_db)):
     return db_service.download_image(order_id, current_user["user_id"], db)
 
-@router.post("/me/orders/{order_id}/approve")
+@router.post("/me/orders/{order_id}/approve", response_model=OrderApprovalResponse)
 def approve_order(order_id: str, current_user=Depends(get_current_user), db = Depends(get_db)):
-    return db_service.approve_order(order_id, current_user["user_id"], db)
+    result = db_service.approve_order(order_id, current_user["user_id"], db)
+    if result["client_approval"] and result["artist_approval"]:
+        db_service.release_image(order_id, current_user["user_id"], db)
+    return result

@@ -5,12 +5,17 @@ from fastapi import  HTTPException
 from app.models.user import *
 import uuid
 import re
+from pathlib import Path
+from ...watermark import watermark
 
 ################################################################
 # Handling user accounts, view all, view one, create one, delete one
 ################################################################
 
 ph = PasswordHasher()
+BASE_DIR = Path(__file__).resolve().parents[3]
+WATERMARK_PATH = BASE_DIR / "watermark" / "slime_watermark.png"
+OUTPUT_PATH = BASE_DIR / "watermark" / "test.png"
 
 # user issues
 def get_users(db):
@@ -306,4 +311,181 @@ def upload_image(new_image, user_id, db):
     db["image"].insert_one(image)
 
     return image
+
+def accept_order(order_id, user_id, db):
+    user = db["user"].find_one({"user_id": user_id})
+    if not user: # Make sure user exists
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    order = db["order"].find_one({"order_id": order_id})
+    if not order: # Make sure order exists
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    if order["artist"]["user_id"] != user_id: # Make sure the person is the artist
+        raise HTTPException(status_code=403, detail="Not authorized")
+    result = db["order"].update_one(
+        {
+            "order_id": order_id,
+            "artist.user_id": user_id
+        },
+        {"$set": {"status": "accepted"}}
+    )
+
+    if result.match_count == 0:
+        raise HTTPException(status_code=400, detail="Order not found or cannot be accepted")
+    return {"status": "accepted"}
+
+def decline_order(order_id, user_id, db):
+    user = db["user"].find_one({"user_id": user_id})
+    if not user: # Make sure user exists
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    order = db["order"].find_one({"order_id": order_id})
+    if not order: # Make sure order exists
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    if order["artist"]["user_id"] != user_id: # Make sure the person is the artist
+        raise HTTPException(status_code=403, detail="Not authorized")
+    result = db["order"].update_one(
+        {
+            "order_id": order_id,
+            "artist.user_id": user_id
+        },
+        {"$set": {"status": "declined"}}
+    )
+
+    if result.match_count == 0:
+        raise HTTPException(status_code=400, detail="Order not found or cannot be accepted")
+    return {"status": "declined"}
+
+def upload_order_image(uploaded_image, order_id, user_id, db):
+    user = db["user"].find_one({"user_id": user_id})
+    if not user: # Make sure order exists
+        raise HTTPException(status_code=404, detail="User not found")
+    order = db["order"].find_one({"order_id": order_id})
+    if not order: # Make sure order exists
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    if order["artist"]["user_id"] != user_id:
+        raise HTTPException(status_code=403, detail="Only the artist can upload artwork")
+    
+    if order["status"] != "accepted":
+        raise HTTPException(status_code=400, detail="Cannot upload to an unaccepted request")
+    
+    order_asset = {
+        "order_id": order_id,
+        "artist_id": order["artist"]["user_id"] ,
+        "client_id": order["client"]["user_id"],
+        "unwatermarked_path": uploaded_image.unwatermarked_path,
+        "watermarked_path": watermark.full_watermark(uploaded_image.unwatermarked_path, str(WATERMARK_PATH), str(OUTPUT_PATH)), 
+        "art_uploaded": True,
+        "released_to_buyer": False
+    }
+
+    existing = db["order_asset"].find_one({"order_id": order_id})
+    if existing:
+        db["order_asset"].update_one(
+            {"order_id": order_id},
+            {"$set": order_asset}
+        )
+    else:
+        db["order_asset"].insert_one(order_asset)
+
+    return order_asset
+
+def download_image(order_id, user_id, db):
+    user = db["user"].find_one({"user_id": user_id})
+    if not user: # Make sure order exists
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    order = db["order"].find_one({"order_id": order_id})
+    if not order:
+        raise HTTPException(status_code=200, detail="Order not found")
+    
+    order_asset = db["order_asset"].find_one({"order_id": order_id})
+
+    if not order_asset: # Make sure order exists
+        raise HTTPException(status_code=404, detail="Order asset not found")
+    
+    if order_asset["art_uploaded"] == False:
+        raise HTTPException(status_code=404, detail="Art not uploaded or not found")
+    
+    if order_asset["released_to_buyer"] == False:
+        raise HTTPException(status_code=403, detail="Not permitted to get art")
+    
+    if order_asset["user_id"] != user_id:
+        raise HTTPException(status_code=403, detail="Only the client can download artwork")
+
+    order_image = {
+        "order_id": order_id,
+        "unwatermarked_path": order_asset["unwatermarked_path"]
+    }
+
+    return order_image
+
+def approve_order(order_id, user_id, db):
+    user = db["user"].find_one({"user_id": user_id})
+    if not user: # Make sure order exists
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    order = db["user"].find_one({"order_id": order_id})
+    if not order: # Make sure order exists
+        raise HTTPException(status_code=404, detail="Order not found")
+    if order["status"] != "accepted": # Make sure order is accepted
+        raise HTTPException(status_code=400, detail="Order not accepted")
+    update_fields = {}
+
+    if order["client"]["user_id"] == user_id: # Update if client
+        if order.get("client_approval", False):
+            raise HTTPException(status_code=400, detail="Client already approved!")
+        update_fields["client_approval"] = True
+    elif order["artist"]["user_id"] == user_id: # Update if artist
+        if order.get("artist_approval", False):
+            raise HTTPException(status_code=400, detail="Artist already approved!")
+        update_fields["client_approval"] = True
+    else: # otherwise youre not allowed
+        raise HTTPException(status_code=403, detail="Not authorized to approve.")
+    
+    db["order"].update_one(
+        {"order_id": order_id},
+        {"$set": update_fields}
+    )
+    updated = db["order"].find_one({"order_id": order_id}, {"_id": 0})
+
+    return {
+        "order_id": updated["order_id"],
+        "client_approval": updated.get("client_approval", False),
+        "artist_approval": updated.get("artist_approval", False)
+    }
+
+def release_image(order_id, user_id, db):
+    user = db["user"].find_one({"user_id": user_id})
+    if not user: # Make sure order exists
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    order = db["order"].find_one({"order_id": order_id})
+    if not order: # Make sure order exists
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    order_asset = db["order_asset"].find_one({"order_id": order_id})
+    if not order_asset:
+        raise HTTPException(status_code=404, detail="Image not found")
+    
+    if order_asset.get("art_uploaded", False):
+        raise HTTPException(status_code=400, detail="Art not uploaded")
+    
+    
+    db["order_asset"].update_one(
+        {"order_id": order_id},
+        {"$set": {"released_to_buyer": True}}
+    )
+
+    db["order"].update_one(
+        {"order_id": order_id},
+        {"$set": {"status": "completed"}}
+    )
+
+    updated_order_asset = db["order_asset"].find_one({"order_id": order_id}, {"_id": 0})
+    return updated_order_asset["unwatermarked_path"]
+    
 ################################################################
