@@ -1,6 +1,8 @@
+import pytest
 # /auth/register Tests
 # * Test 1:     Test Register Route (Register new account)
 # * Test 2:     Test Register Route (Create account with same email or username)
+
 def test_register_route(client, user_payload):
     response = client.post("/auth/register", json=user_payload)
 
@@ -19,6 +21,7 @@ def test_register_route_duplicate(client, user_payload):
 # /auth/login Tests
 # * Test 1:     Test Login Route (Invalid Login credentials fails)
 # * Test 2:     Test Login Route (Invalid Login credentials passes)
+
 def test_login_route_fail(client, registered_user):
 
     wrong_email = "wrongemail@example.com"
@@ -48,6 +51,7 @@ def test_login_route_success(client, registered_user):
 
 # /auth/logout Tests
 # * Test 1:     Test Logout Route (Logout success)
+
 def test_logout_route_success(client, auth_headers):
     logout_response = client.post("/auth/logout", headers=auth_headers)
 
@@ -57,6 +61,7 @@ def test_logout_route_success(client, auth_headers):
 # /user/me tests
 # * Test 1: Check if we can view ourselves
 # * Test 2: Check if we can delete ourselves
+
 def test_get_me(client, registered_user, auth_headers):
     response = client.get("/user/me", headers=auth_headers)
 
@@ -79,6 +84,7 @@ def test_delete_user_account(client, auth_headers):
 # * Test 3: Check if we can update our settings (no items)
 # * Test 4: Check if we can update our settings (many items)
 # * Test 5: Update username to existing username or email fail
+
 def test_get_settings(client, registered_user, auth_headers):
     response =  client.get("/user/me/settings", headers=auth_headers)
 
@@ -171,6 +177,7 @@ def test_change_existing_user_info(client, auth_headers):
 # * Test 2: Check if we can get a single user image
 # * Test 3: Check if we can delete a single user image
 # * Test 4: Check if delete non-existing image fail
+
 def test_get_user_images(client, user_images, registered_user, auth_headers):
 
     response = client.get("/user/me/images", headers=auth_headers)
@@ -218,14 +225,37 @@ def test_delete_image_not_found(client, auth_headers):
 
     assert response.status_code == 404
 
-# /user/me/orders Tests
-# * Test 1: Check if we can retrieve all the user orders
-# * Test 2: Check if we can get a single user order
-# * Test 3: Check if we can delete a single user order
-# * Test 4: Check if delete non-existing order
-def test_get_user_orders(client, user_orders, registered_user, auth_headers):
+# /user/me/orders/upload Tests
+# * Test 1: Check if we can upload a piece of art
 
-    response = client.get("/user/me/orders", headers=auth_headers)
+def test_upload_artwork(client, registered_user, auth_headers):
+    response = client.post("/user/me/images/upload",
+                           headers=auth_headers,
+                           json={
+                               "image_path": "new/image.png",
+                               "description": "new description"
+                           })
+    
+    assert response.status_code == 200
+    data = response.json()
+    assert "image_id" in data
+    assert "artist" in data
+    assert data["image_path"] == "new/image.png"
+    assert data["artist"]["user_id"] == registered_user["user_id"]
+
+
+
+# /user/me/orders Tests
+# * Test 1: Check if we can get all orders where we are the client
+# * Test 2: Check if we can get all orders where we are the artist
+# * Test 3: Check if we can get 1 order as client
+# * Test 4: Check if we can get 1 order as artist
+# * Test 5: Check if we can delete 1 order as client
+# * Test 6: Check if we can delete 1 order as artist
+# * Test 7: Check if we can delete non-existent order (should fail)
+
+def test_get_user_orders_as_client(client, user_orders, registered_user, auth_headers):
+    response = client.get("/user/me/orders/client", headers=auth_headers)
 
     assert response.status_code == 200
     data = response.json()
@@ -241,7 +271,24 @@ def test_get_user_orders(client, user_orders, registered_user, auth_headers):
     assert second["order_id"] == user_orders[1]["order_id"]
     assert second["client"]["user_id"] == registered_user["user_id"]
 
-def test_get_specific_order(client, user_orders, registered_user, auth_headers):
+def test_get_user_orders_as_artist(client, user_orders, registered_user, auth_headers):
+    response = client.get("/user/me/orders/artist", headers=auth_headers)
+
+    assert response.status_code == 200
+    data = response.json()
+
+    assert len(data) == 2
+
+    first = data[0]
+    second = data[1]
+
+    assert first["order_id"] == user_orders[2]["order_id"]
+    assert first["artist"]["user_id"] == registered_user["user_id"]
+
+    assert second["order_id"] == user_orders[3]["order_id"]
+    assert second["artist"]["user_id"] == registered_user["user_id"]
+
+def test_get_order_as_client(client, user_orders, registered_user, auth_headers):
     order_id = user_orders[0]["order_id"]
     response = client.get(f"/user/me/orders/{order_id}", headers=auth_headers)
 
@@ -251,8 +298,31 @@ def test_get_specific_order(client, user_orders, registered_user, auth_headers):
     assert data["order_id"] == order_id
     assert data["client"]["user_id"] == registered_user["user_id"]
 
-def test_delete_specific_order(client, user_orders, auth_headers):
+def test_get_order_as_artist(client, user_orders, registered_user, auth_headers):
+    order_id = user_orders[2]["order_id"]
+    response = client.get(f"/user/me/orders/{order_id}", headers=auth_headers)
+
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["order_id"] == order_id
+    assert data["artist"]["user_id"] == registered_user["user_id"]
+
+def test_delete_order_as_client(client, user_orders, auth_headers):
     order_id = user_orders[0]["order_id"]
+    response = client.delete(f"/user/me/orders/{order_id}", headers=auth_headers)
+
+    assert response.status_code == 200
+
+    # Test to see if we can now get it
+    delete_check = client.get(f"/user/me/orders/{order_id}", headers=auth_headers)
+    assert delete_check.status_code == 404
+
+    data = response.json()
+    assert data["deleted_order"] == order_id
+
+def test_delete_order_as_artist(client, user_orders, auth_headers):
+    order_id = user_orders[2]["order_id"]
     response = client.delete(f"/user/me/orders/{order_id}", headers=auth_headers)
 
     assert response.status_code == 200

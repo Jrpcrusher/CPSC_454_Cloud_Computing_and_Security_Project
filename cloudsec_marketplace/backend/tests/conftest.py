@@ -119,6 +119,24 @@ def user_orders(test_db, registered_user):
             "status": "received",
             "transaction_id": None
 
+        },
+        {
+            "order_id": "3f7a9b2c-6d4e-4a1f-8c2b-5e9d7f0a1b3e",
+            "client": artist,
+            "artist": client,
+            "order_details": "",
+            "creation_date": datetime.now(timezone.utc),
+            "status": "received",
+            "transaction_id": None
+        },
+        {
+            "order_id": "3f7a9b2c-6d4e-4a1f-8c2b-5e9d7f0a1b3f",
+            "client": artist,
+            "artist": client,
+            "order_details": "",
+            "creation_date": datetime.now(timezone.utc),
+            "status": "received",
+            "transaction_id": None
         }
     ]
     test_db["order"].insert_many(orders)
