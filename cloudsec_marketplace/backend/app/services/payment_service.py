@@ -360,6 +360,12 @@ def execute_escrow_release(order_id: str, txn: dict, db):
         {"$set": {"released_to_buyer": True, "released_at": datetime.utcnow().isoformat()}},
     )
 
+    # Sync order_asset so the download route (db_service.download_image) works
+    db["order_asset"].update_one(
+        {"order_id": order_id},
+        {"$set": {"released_to_buyer": True}},
+    )
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 4. ARTIST PAYOUT — Platform pays the artist via Stripe Connect

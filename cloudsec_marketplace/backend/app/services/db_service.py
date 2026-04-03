@@ -418,7 +418,7 @@ def accept_order(order_id, user_id, db):
         {"$set": {"status": "accepted"}}
     )
 
-    if result.match_count == 0:
+    if result.matched_count == 0:
         raise HTTPException(status_code=400, detail="Order not found or cannot be accepted")
     return {"status": "accepted"}
 

@@ -19,11 +19,13 @@ def clear_database(test_db):
     test_db["order"].delete_many({})
     test_db["transaction"].delete_many({})
     test_db["escrow_asset"].delete_many({})
+    test_db["order_asset"].delete_many({})
     yield
     test_db["user"].delete_many({})
     test_db["order"].delete_many({})
     test_db["transaction"].delete_many({})
     test_db["escrow_asset"].delete_many({})
+    test_db["order_asset"].delete_many({})
 
 @pytest.fixture
 def client(test_db):
@@ -300,3 +302,54 @@ def mock_stripe():
 
     with patch("app.services.payment_service.get_stripe_client", return_value=mock_client):
         yield mock_client
+
+
+@pytest.fixture
+def artist_no_stripe_user(test_db):
+    """An artist user WITHOUT a Stripe Connect account."""
+    user = {
+        "user_id": str(uuid4()),
+        "username": "artist_no_stripe",
+        "email": "artist_nostripe@example.com",
+        "pfp_path": None,
+        "pfp_key": None,
+        "description": None,
+        "role": "user",
+    }
+    test_db["user"].insert_one({**user, "passwordHash": "not_used_directly"})
+    return user
+
+
+@pytest.fixture
+def artist_no_stripe_headers(artist_no_stripe_user):
+    """Auth headers for an artist without Stripe."""
+    token = create_access_token({"user_id": artist_no_stripe_user["user_id"]})
+    return {"authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
+def accepted_order(test_db, buyer_user, artist_user):
+    """An order in 'accepted' status between the buyer and artist."""
+    order = {
+        "order_id": str(uuid4()),
+        "client": {
+            "user_id": buyer_user["user_id"],
+            "email": buyer_user["email"],
+            "username": buyer_user["username"],
+            "pfp_key": None,
+        },
+        "artist": {
+            "user_id": artist_user["user_id"],
+            "email": artist_user["email"],
+            "username": artist_user["username"],
+            "pfp_key": None,
+        },
+        "order_details": "Test commission",
+        "creation_date": datetime.now(timezone.utc),
+        "status": "accepted",
+        "client_approval": False,
+        "artist_approval": False,
+        "transaction_id": None,
+    }
+    test_db["order"].insert_one(order)
+    return order

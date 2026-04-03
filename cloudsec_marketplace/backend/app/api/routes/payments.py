@@ -9,9 +9,10 @@ Endpoints:
   POST /payments/{order_id}/artwork-uploaded → Signal that artist uploaded final art
   GET  /payments/{order_id}/download → Buyer downloads released unwatermarked art
   POST /payments/{order_id}/refund   → Refund / cancel a payment
-  POST /payments/artist/onboard      → Artist sets up Stripe Connect account
-  GET  /payments/artist/onboard/status → Check artist onboarding status
-  GET  /payments/my-transactions     → User views their transactions
+  POST /payments/artist/onboard         → Artist sets up Stripe Connect account
+  POST /payments/artist/onboard/refresh → Refresh expired onboarding link
+  GET  /payments/artist/onboard/status  → Check artist onboarding status
+  GET  /payments/my-transactions        → User views their transactions
 """
 
 import stripe
@@ -19,6 +20,8 @@ from stripe import StripeClient
 from fastapi import APIRouter, Depends, Request, HTTPException
 from app.api.deps import get_db, get_current_user
 from app.core.config import settings
+
+stripe.api_key = settings.STRIPE_SECRET_KEY
 from app.services import payment_service
 from app.services.payment_service import get_stripe_client
 from app.models.transaction import (
@@ -219,33 +222,106 @@ def refund_payment(
 def onboard_artist(current_user=Depends(get_current_user), db=Depends(get_db)):
     """
     Creates a Stripe Connect Express account for the artist and returns
-    the onboarding URL.
-
-    NOTE: Once auth is implemented, artist_id and email should come from
-    get_current_user. For now, expect them in the request body.
+    the onboarding URL. If the artist already has a connected account and
+    onboarding is complete, returns a message instead.
     """
-    # TODO: Use get_current_user to get artist info automatically
-    # Placeholder — will need artist_id and email from auth
-    raise HTTPException(
-        status_code=501,
-        detail="Artist onboarding requires auth (get_current_user). "
-               "Waiting for Jrpcrusher's auth implementation. "
-               "Call payment_service.create_artist_connect_account() once auth is ready."
-    )
+    artist_id = current_user["user_id"]
+    email = current_user["email"]
+    stripe_account_id = current_user.get("stripe_account_id")
+
+    # If artist already has a Stripe account, check if onboarding is complete
+    if stripe_account_id:
+        try:
+            account = stripe.Account.retrieve(stripe_account_id)
+        except stripe.StripeError as e:
+            raise HTTPException(status_code=502, detail=f"Stripe error: {str(e)}")
+
+        if account.charges_enabled and account.payouts_enabled:
+            return {"detail": "Artist is already fully onboarded."}
+
+    # Create a new Connect account if none exists
+    if not stripe_account_id:
+        try:
+            account = stripe.Account.create(
+                type="express",
+                email=email,
+                metadata={"user_id": current_user["user_id"]}
+            )
+        except stripe.StripeError as e:
+            raise HTTPException(status_code=502, detail=f"Stripe error: {str(e)}")
+
+        stripe_account_id = account.id
+        db["user"].update_one(
+            {"user_id": artist_id},
+            {"$set": {"stripe_account_id": stripe_account_id}}
+        )
+
+    # Create an onboarding link
+    try:
+        account_link = stripe.AccountLink.create(
+            account=stripe_account_id,
+            refresh_url=settings.STRIPE_ONBOARD_REFRESH_URL,
+            return_url=settings.STRIPE_ONBOARD_RETURN_URL,
+            type="account_onboarding",
+        )
+    except stripe.StripeError as e:
+        raise HTTPException(status_code=502, detail=f"Stripe error: {str(e)}")
+
+    return {"onboarding_url": account_link.url}
+
+
+@router.post("/artist/onboard/refresh")
+def refresh_onboard_link(current_user=Depends(get_current_user), db=Depends(get_db)):
+    """
+    Generate a new onboarding link if the previous one expired or the artist
+    needs to restart.
+    """
+    stripe_account_id = current_user.get("stripe_account_id")
+    if not stripe_account_id:
+        raise HTTPException(
+            status_code=400,
+            detail="No Stripe account found. Start onboarding first."
+        )
+
+    try:
+        account_link = stripe.AccountLink.create(
+            account=stripe_account_id,
+            refresh_url=settings.STRIPE_ONBOARD_REFRESH_URL,
+            return_url=settings.STRIPE_ONBOARD_RETURN_URL,
+            type="account_onboarding",
+        )
+    except stripe.StripeError as e:
+        raise HTTPException(status_code=502, detail=f"Stripe error: {str(e)}")
+
+    return {"onboarding_url": account_link.url}
 
 
 @router.get("/artist/onboard/status")
 def check_artist_onboard_status(current_user=Depends(get_current_user), db=Depends(get_db)):
     """
     Check if the current artist has completed Stripe Connect onboarding.
-
-    NOTE: Requires auth to identify the artist.
     """
-    # TODO: Use get_current_user to get artist_id
-    raise HTTPException(
-        status_code=501,
-        detail="Requires auth implementation to identify the artist."
-    )
+    stripe_account_id = current_user.get("stripe_account_id")
+    if not stripe_account_id:
+        return {"status": "not_started"}
+
+    try:
+        account = stripe.Account.retrieve(stripe_account_id)
+    except stripe.StripeError as e:
+        raise HTTPException(status_code=502, detail=f"Stripe error: {str(e)}")
+
+    if account.charges_enabled and account.payouts_enabled:
+        return {
+            "status": "complete",
+            "charges_enabled": True,
+            "payouts_enabled": True,
+        }
+
+    return {
+        "status": "pending",
+        "charges_enabled": account.charges_enabled,
+        "payouts_enabled": account.payouts_enabled,
+    }
 
 
 # ─── User Transactions ──────────────────────────────────────────────────────

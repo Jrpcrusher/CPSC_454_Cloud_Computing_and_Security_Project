@@ -30,6 +30,7 @@ class ViewMe(BaseModel): # For viewing own profile
     pfp_key: str | None = None
     pfp_url: str | None = None
     description: str | None = Field(default=None, max_length=500)
+    stripe_account_id: str | None = None
 
 class UpdateSettings(BaseModel): # What is needed for updating settings
     username: str | None = Field(default=None, min_length=3, max_length=30)
