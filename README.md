@@ -295,6 +295,5 @@ cloudsec_marketplace/
 | `user` | User accounts (credentials, profile, Stripe account ID) |
 | `image` | Portfolio images uploaded by artists |
 | `order` | Commission orders between buyers and artists |
-| `order_asset` | Uploaded artwork files (watermarked + unwatermarked S3 keys) |
-| `escrow_asset` | Escrow-tracked artwork (synced with order_asset during payment flow) |
+| `order_asset` | Uploaded artwork files (S3 keys, upload/release status for escrow) |
 | `transaction` | Payment records (Stripe PaymentIntent, status, payout info) |

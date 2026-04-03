@@ -18,13 +18,11 @@ def clear_database(test_db):
     test_db["user"].delete_many({})
     test_db["order"].delete_many({})
     test_db["transaction"].delete_many({})
-    test_db["escrow_asset"].delete_many({})
     test_db["order_asset"].delete_many({})
     yield
     test_db["user"].delete_many({})
     test_db["order"].delete_many({})
     test_db["transaction"].delete_many({})
-    test_db["escrow_asset"].delete_many({})
     test_db["order_asset"].delete_many({})
 
 @pytest.fixture
@@ -49,7 +47,7 @@ def registered_user(client, user_payload):
     return {
         **user_payload,
         "user_id": data["user_id"],
-        "pfp_path": None
+        "pfp_key": None
     }
 
 @pytest.fixture # Fixture for getting the token
@@ -70,13 +68,13 @@ def user_images(test_db, registered_user):
         "user_id": registered_user["user_id"],
         "email": registered_user["email"],
         "username": registered_user["username"],
-        "pfp_path": None
+        "pfp_key": None
     }
 
     images = [
         {
             "image_id": "3f7a9b2c-6d4e-4a1f-8c2b-5e9d7f0a1b3c",
-            "image_path": "path/image1.png",
+            "image_key": "path/image1.png",
             "artist": artist,
             "upload_date": datetime.now(timezone.utc),
             "description": ""
@@ -84,7 +82,7 @@ def user_images(test_db, registered_user):
         },
         {
             "image_id": "3f7a9b2c-6d4e-4a1f-8c2b-5e9d7f0a1b3d",
-            "image_path": "path/image2.png",
+            "image_key": "path/image2.png",
             "artist": artist,
             "upload_date": datetime.now(timezone.utc),
             "description": ""
@@ -100,14 +98,14 @@ def user_orders(test_db, registered_user):
         "user_id": registered_user["user_id"],
         "email": registered_user["email"],
         "username": registered_user["username"],
-        "pfp_path": None
+        "pfp_key": None
     }
 
     artist = {
         "user_id": "3f7a9b2c-6d4e-4a1f-8c2b-5e9d7f0a1bdd",
         "email": "client@example.com",
         "username": "client",
-        "pfp_path": None
+        "pfp_key": None
     }
 
     orders = [
@@ -169,7 +167,7 @@ def buyer_user(test_db):
         "user_id": str(uuid4()),
         "username": "buyer_user",
         "email": "buyer@example.com",
-        "pfp_path": None,
+        "pfp_key": None,
         "pfp_key": None,
         "description": None,
         "role": "user",
@@ -185,7 +183,7 @@ def artist_user(test_db):
         "user_id": str(uuid4()),
         "username": "artist_user",
         "email": "artist@example.com",
-        "pfp_path": None,
+        "pfp_key": None,
         "pfp_key": None,
         "description": None,
         "role": "user",
@@ -202,7 +200,7 @@ def stranger_user(test_db):
         "user_id": str(uuid4()),
         "username": "stranger",
         "email": "stranger@example.com",
-        "pfp_path": None,
+        "pfp_key": None,
         "pfp_key": None,
         "description": None,
         "role": "user",
@@ -241,13 +239,13 @@ def test_order(test_db, buyer_user, artist_user):
             "user_id": buyer_user["user_id"],
             "email": buyer_user["email"],
             "username": buyer_user["username"],
-            "pfp_path": None,
+            "pfp_key": None,
         },
         "artist": {
             "user_id": artist_user["user_id"],
             "email": artist_user["email"],
             "username": artist_user["username"],
-            "pfp_path": None,
+            "pfp_key": None,
         },
         "order_details": "Test commission",
         "creation_date": datetime.now(timezone.utc),
@@ -311,7 +309,7 @@ def artist_no_stripe_user(test_db):
         "user_id": str(uuid4()),
         "username": "artist_no_stripe",
         "email": "artist_nostripe@example.com",
-        "pfp_path": None,
+        "pfp_key": None,
         "pfp_key": None,
         "description": None,
         "role": "user",

@@ -159,8 +159,8 @@ def artwork_uploaded(
     NOTE: In production, this should be called internally by the upload route,
     not directly by the client. For now it's exposed for testing/integration.
 
-    Expects the escrow_asset record to already exist in the DB
-    (populated by the upload service via payment_service.register_escrow_asset).
+    Expects the order_asset record to already exist in the DB
+    (populated by the upload route via db_service.upload_order_image).
     """
     order = db["order"].find_one({"order_id": order_id})
     if not order:

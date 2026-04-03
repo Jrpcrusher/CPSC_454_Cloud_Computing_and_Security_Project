@@ -218,7 +218,7 @@ def check_escrow_ready(order_id: str, db) -> bool:
     """
     Check if ALL 4 escrow conditions are met before releasing:
       1. Funds are held (transaction status == 'funds_held')
-      2. Unwatermarked art has been uploaded (escrow_asset.unwatermarked_uploaded)
+      2. Unwatermarked art has been uploaded (order_asset.art_uploaded)
       3. Client has approved the order (order.client_approval == True)
       4. Artist has approved the order (order.artist_approval == True)
 
@@ -243,8 +243,8 @@ def check_escrow_ready(order_id: str, db) -> bool:
     if not txn:
         return False
 
-    # Condition 5: Unwatermarked art uploaded?
-    asset = db["escrow_asset"].find_one({"order_id": order_id, "unwatermarked_uploaded": True})
+    # Condition 5: Art uploaded?
+    asset = db["order_asset"].find_one({"order_id": order_id, "art_uploaded": True})
     if not asset:
         return False
 
@@ -308,9 +308,9 @@ def execute_escrow_release(order_id: str, txn: dict, db):
             f"artist_approval={order.get('artist_approval')}"
         )
         return
-    asset = db["escrow_asset"].find_one({"order_id": order_id, "unwatermarked_uploaded": True})
+    asset = db["order_asset"].find_one({"order_id": order_id, "art_uploaded": True})
     if not asset:
-        logger.error(f"Escrow release aborted — no unwatermarked art: order_id={order_id}")
+        logger.error(f"Escrow release aborted — no uploaded art: order_id={order_id}")
         return
 
     pi_id = txn["stripe_payment_intent_id"]
@@ -355,15 +355,9 @@ def execute_escrow_release(order_id: str, txn: dict, db):
     )
 
     # Step 7: Release unwatermarked art to buyer.
-    db["escrow_asset"].update_one(
-        {"order_id": order_id},
-        {"$set": {"released_to_buyer": True, "released_at": datetime.utcnow().isoformat()}},
-    )
-
-    # Sync order_asset so the download route (db_service.download_image) works
     db["order_asset"].update_one(
         {"order_id": order_id},
-        {"$set": {"released_to_buyer": True}},
+        {"$set": {"released_to_buyer": True, "released_at": datetime.utcnow().isoformat()}},
     )
 
 
@@ -548,40 +542,31 @@ def refund_order(order_id: str, db):
 # 6. ESCROW ASSET TRACKING — Called by art upload flow
 # ═══════════════════════════════════════════════════════════════════════════
 
-def register_escrow_asset(order_id: str, s3_watermarked_path: str,
-                          s3_unwatermarked_path: str, db):
+def mark_art_uploaded_for_escrow(order_id: str, db):
     """
-    Called when the artist uploads the final artwork.
-    Registers both the watermarked (for buyer preview) and unwatermarked
-    (for release after escrow) versions.
+    Called after the artist uploads artwork and an active transaction exists.
+    Stamps `uploaded_at` on the existing order_asset document (which was
+    already created by db_service.upload_order_image) and then checks if
+    escrow is ready to release.
 
-    Requires the order to be in 'accepted' status — the artist must have
-    formally accepted the commission before artwork can be registered.
-
-    Then checks if escrow is ready to release.
+    The order_asset doc must already exist with art_uploaded=True — if it
+    doesn't, something went wrong in the upload flow.
     """
-    # Guard: order must be accepted before registering escrow assets
-    order = db["order"].find_one({"order_id": order_id})
-    if not order or order.get("status") != "accepted":
-        raise HTTPException(
-            status_code=400,
-            detail="Order must be in 'accepted' status before registering escrow assets.",
+    import logging
+    logger = logging.getLogger(__name__)
+
+    asset = db["order_asset"].find_one({"order_id": order_id, "art_uploaded": True})
+    if not asset:
+        logger.warning(
+            f"mark_art_uploaded_for_escrow called but no order_asset with "
+            f"art_uploaded=True for order_id={order_id}"
         )
+        return False
 
     now = datetime.utcnow().isoformat()
-
-    # Upsert the escrow asset record
-    db["escrow_asset"].update_one(
+    db["order_asset"].update_one(
         {"order_id": order_id},
-        {"$set": {
-            "order_id": order_id,
-            "s3_watermarked_path": s3_watermarked_path,
-            "s3_unwatermarked_path": s3_unwatermarked_path,
-            "unwatermarked_uploaded": True,
-            "released_to_buyer": False,
-            "uploaded_at": now,
-        }},
-        upsert=True
+        {"$set": {"uploaded_at": now}},
     )
 
     # Check if escrow can complete (funds might already be held)
@@ -593,7 +578,7 @@ def get_buyer_download(order_id: str, buyer_id: str, db):
     Returns the S3 path for the unwatermarked art — only if escrow has released it.
     The S3 service (Arctic's responsibility) will generate the presigned URL.
     """
-    asset = db["escrow_asset"].find_one({"order_id": order_id})
+    asset = db["order_asset"].find_one({"order_id": order_id})
     if not asset:
         raise HTTPException(status_code=404, detail="No artwork found for this order.")
     if not asset.get("released_to_buyer"):
@@ -613,8 +598,7 @@ def get_buyer_download(order_id: str, buyer_id: str, db):
 
     return {
         "order_id": order_id,
-        "s3_unwatermarked_path": asset["s3_unwatermarked_path"],
-        # TODO: Arctic's s3_service will generate a presigned download URL from this path
+        "unwatermarked_key": asset["unwatermarked_key"],
     }
 
 

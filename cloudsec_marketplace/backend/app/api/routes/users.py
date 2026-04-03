@@ -93,19 +93,14 @@ def decline_order(order_id: str, current_user=Depends(get_current_user), db = De
 def upload_order_image(order_id: str, image: UploadFile = File(...), current_user=Depends(get_current_user), db = Depends(get_db)):
     result = db_service.upload_order_image(image, order_id, current_user["user_id"], db)
 
-    # If there's an active transaction, register with the escrow system
+    # If there's an active transaction, stamp uploaded_at and check escrow
     active_txn = db["transaction"].find_one({
         "order_id": order_id,
         "status": {"$in": ["pending", "funds_held"]}
     })
     if active_txn:
-        from app.services.payment_service import register_escrow_asset
-        register_escrow_asset(
-            order_id=order_id,
-            s3_watermarked_path=result["watermarked_key"],
-            s3_unwatermarked_path=result["unwatermarked_key"],
-            db=db,
-        )
+        from app.services.payment_service import mark_art_uploaded_for_escrow
+        mark_art_uploaded_for_escrow(order_id=order_id, db=db)
 
     return result
 
