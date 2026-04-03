@@ -11,7 +11,7 @@ class TransactionStatus(str, Enum):
     payout_sent = "payout_sent"         # Artist has been paid out
     failed = "failed"                   # Payment failed
     refunded = "refunded"               # Buyer was refunded
-    cancelled = "cancelled"             # Payment intent was cancelled / expired
+    canceled = "canceled"               # Payment intent was canceled / expired
 
 
 class Transaction(BaseModel):

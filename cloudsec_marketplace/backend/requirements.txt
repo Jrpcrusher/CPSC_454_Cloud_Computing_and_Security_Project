@@ -1,7 +1,28 @@
+# Core framework
 fastapi
 uvicorn[standard]
-pydantic
+pydantic[email]
 pydantic-settings
 python-dotenv
+python-multipart
+
+# Database
 pymongo
+
+# Authentication
+python-jose[cryptography]
+argon2-cffi
+
+# Payments
 stripe
+
+# AWS / S3
+boto3
+
+# Image processing
+Pillow
+
+# Testing
+pytest
+mongomock
+httpx

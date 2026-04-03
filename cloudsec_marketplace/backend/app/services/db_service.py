@@ -426,13 +426,15 @@ def decline_order(order_id, user_id, db):
     user = db["user"].find_one({"user_id": user_id})
     if not user: # Make sure user exists
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     order = db["order"].find_one({"order_id": order_id})
     if not order: # Make sure order exists
         raise HTTPException(status_code=404, detail="Order not found")
-    
+
     if order["artist"]["user_id"] != user_id: # Make sure the person is the artist
         raise HTTPException(status_code=403, detail="Not authorized")
+
+    # Decline the order first — this should always succeed
     result = db["order"].update_one(
         {
             "order_id": order_id,
@@ -441,8 +443,27 @@ def decline_order(order_id, user_id, db):
         {"$set": {"status": "declined"}}
     )
 
-    if result.match_count == 0:
-        raise HTTPException(status_code=400, detail="Order not found or cannot be accepted")
+    if result.matched_count == 0:
+        raise HTTPException(status_code=400, detail="Order not found or cannot be declined")
+
+    # If there's an active transaction with held funds, refund the buyer
+    active_txn = db["transaction"].find_one({
+        "order_id": order_id,
+        "status": {"$in": ["pending", "funds_held", "released"]},
+    })
+    if active_txn:
+        try:
+            from app.services.payment_service import refund_order
+            refund_order(order_id, db)
+        except Exception as e:
+            # CRITICAL: Order is declined but refund failed — needs manual intervention.
+            # Log the error but don't undo the decline; the artist's decision stands.
+            import logging
+            logging.getLogger(__name__).critical(
+                f"REFUND FAILED on decline: order_id={order_id}, "
+                f"transaction_id={active_txn.get('transaction_id')}, error={str(e)}"
+            )
+
     return {"status": "declined"}
 
 def upload_order_image(upload_file: UploadFile, order_id, user_id, db):
