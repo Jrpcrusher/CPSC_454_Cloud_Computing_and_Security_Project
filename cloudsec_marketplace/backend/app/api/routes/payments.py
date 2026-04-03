@@ -107,10 +107,9 @@ async def stripe_webhook(request: Request, db=Depends(get_db)):
     if not settings.STRIPE_WEBHOOK_SECRET:
         raise HTTPException(status_code=500, detail="Webhook secret not configured.")
 
-    # Verify the webhook signature using the StripeClient's built-in method
+    # Verify the webhook signature using Stripe's module-level method
     try:
-        client = get_stripe_client()
-        event = client.webhooks.construct_event(
+        event = stripe.Webhook.construct_event(
             payload, sig_header, settings.STRIPE_WEBHOOK_SECRET
         )
     except ValueError:
