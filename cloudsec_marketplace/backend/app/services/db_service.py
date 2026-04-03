@@ -5,38 +5,87 @@ from fastapi import  HTTPException, UploadFile
 from app.models.user import *
 import uuid
 import re
-from pathlib import Path
 from ...watermark import watermark
+from .s3_service import S3Service
+import tempfile
+import os
+import shutil
 
 ################################################################
 # Handling user accounts, view all, view one, create one, delete one
 ################################################################
 
 ph = PasswordHasher()
+s3_service = S3Service()
 
 # user issues
 def get_users(db):
     users = list(db["user"].find({}, {"_id": 0, "passwordHash": 0}))
-    return users
+    return [attach_pfp_url(user) for user in users]
 
 def get_user(user_id, db):
     user = db["user"].find_one({"user_id": user_id}, {"_id": 0, "passwordHash": 0})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    return user
+    return attach_pfp_url(user)
 
 def delete_user(user_id, db):
     user = db["user"].find_one({"user_id": user_id})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
+    # First delete the PFP of the user from S3
+    pfp_key = user.get("pfp_key")
+    if pfp_key:
+        try:
+            s3_service.delete_asset(pfp_key)
+        except Exception:
+            pass
+
+    # Delete images in user profile from S3
+    user_images = list(db["image"].find({"artist.user_id": user_id}, {"_id": 0}))
+    for image in user_images:
+        image_key = image.get("image_key")
+        if image_key:
+            try:
+                s3_service.delete_asset(image_key)
+            except Exception:
+                pass
+
+    # get a list of all the orders
+    user_orders = list(
+        db["order"].find(
+            {
+                "$or": [
+                    {"client.user_id": user_id},
+                    {"artist.user_id": user_id}
+                ]
+            }
+        )
+    )
+
+    for order in user_orders:
+        order_asset = db["order_asset"].find_one({"order_id": order["order_id"]}, {"_id": 0})
+        if order_asset:
+            for key_name in ("unwatermarked_key", "watermarked_key"):
+                asset_key = order_asset.get(key_name)
+                if asset_key:
+                    try:
+                        s3_service.delete_asset(asset_key)
+                    except Exception:
+                        pass
+            db["order_asset"].delete_one({"order_id": order["order_id"]})
+
+    # Delete the user from mongodb
     db["user"].delete_one({"user_id": user_id})
+    # Delete orders associated with the user from mongodb
     db["order"].delete_many({
         "$or": [
             {"client.user_id": user_id},
             {"artist.user_id": user_id}
         ]
     })
+    # Delete images from the user in mongodb
     db["image"].delete_many({"artist.user_id": user_id})
     return {"deleted_user": user["user_id"]}
 
@@ -65,12 +114,13 @@ def get_images(user_id, db):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    return list(
+    images =  list(
         db["image"].find(
             {"artist.user_id": user_id},
             {"_id": 0}
         )
     )
+    return [attach_image_url(image) for image in images]
 
 def get_image(user_id, image_id, db):
     user = db["user"].find_one({"user_id": user_id})
@@ -86,7 +136,7 @@ def get_image(user_id, image_id, db):
 
     if not image:
         raise HTTPException(status_code=404, detail="Image not found")
-    return image
+    return attach_image_url(image)
 
 def delete_image(user_id, image_id, db):
     user = db["user"].find_one({"user_id": user_id})
@@ -101,6 +151,14 @@ def delete_image(user_id, image_id, db):
     )
     if not image:
         raise HTTPException(status_code=404, detail="Image not found")
+    
+    image_key = image.get("image_key")
+    if image_key:
+        try:
+            s3_service.delete_asset(image_key)
+        except Exception:
+            pass
+    
     return {"deleted_image": image["image_id"]}
 
 # order issues
@@ -150,6 +208,9 @@ def get_order(user_id, order_id, db):
 
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
+    
+    order = attach_order_pfps(order)
+    order = attach_order_asset_urls(order, db)
     return order
 
 def delete_order(user_id, order_id, db):
@@ -316,18 +377,26 @@ def upload_image(upload_file: UploadFile, description: str | None, user_id, db):
 
     image_id = str(uuid.uuid4())
 
-    # ! TODO: Replace this when S3 functions are finished
-    image_key = f"users/{user_id}/images/{image_id}_{upload_file.filename}"
+    try:
+        upload_file.file.seek(0)
+        result = s3_service.upload_user_public_image(
+            file_obj=upload_file.file,
+            user_id=user_id,
+            image_id=image_id,
+            filename=upload_file.filename or f"{image_id}.png",
+            content_type=upload_file.content_type or "image/png"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to upload image: {str(e)}")
 
     image = {
         "image_id": image_id,
-        "image_key": image_key,
+        "image_key": result["key"],
         "artist": artist,
         "upload_date": datetime.now(timezone.utc),
         "description": description
     }
     db["image"].insert_one(image)
-
     return image
 
 def accept_order(order_id, user_id, db):
@@ -390,29 +459,61 @@ def upload_order_image(upload_file: UploadFile, order_id, user_id, db):
     if order["status"] != "accepted":
         raise HTTPException(status_code=400, detail="Cannot upload to an unaccepted request")
     
-    unwatermarked_key = f"orders/{order_id}/images/{order_id}_{upload_file.filename}" # ! TODO: Replace this when s3_service function is done
-    watermarked_key = f"orders/{order_id}/images/{order_id}_{upload_file.filename}" # ! TODO: Replace this when s3_service function is done
+    original_name = upload_file.filename or "artwork.png"
+    unwatermarked_name = f"original_{original_name}"
+    watermarked_name = f"watermarked_{original_name}"
+
+    with tempfile.TemporaryDirectory() as tempdir:
+        original_path = os.path.join(tempdir, original_name)
+        watermarked_path = os.path.join(tempdir, watermarked_name)
+
+        upload_file.file.seek(0)
+        with open(original_path, "wb") as f:
+            shutil.copyfileobj(upload_file.file, f)
+
+        # make the watermarked version
+        watermark.full_watermark(
+            input_image_path=original_path,
+            watermark_path="", # ! TODO: Give path to watermark image
+            output_image_path=watermarked_path,
+        )
+
+        # Now upload the original
+        with open(original_path, "rb") as original_file:
+            original_result = s3_service.upload_order_image(
+                file_obj=original_file,
+                order_id=order_id,
+                file_name=unwatermarked_name,
+                content_type=upload_file.content_type or "image/png"
+            )
+
+        # Upload the watermarked version
+        with open(watermarked_path, "rb") as watermarked_file:
+            watermarked_result = s3_service.upload_order_image(
+                file_obj=watermarked_file,
+                order_id=order_id,
+                file_name=watermarked_name,
+                content_type=upload_file.content_type or "image/png"
+            )
+
     order_asset = {
         "order_id": order_id,
         "artist_id": order["artist"]["user_id"] ,
         "client_id": order["client"]["user_id"],
-        "unwatermarked_key": unwatermarked_key,
-        "watermarked_key": watermarked_key, 
+        "unwatermarked_key": original_result["key"],
+        "watermarked_key": watermarked_result["key"], 
         "art_uploaded": True,
         "released_to_buyer": False
     }
 
-    existing = db["order_asset"].find_one({"order_id": order_id})
-    if existing:
-        db["order_asset"].update_one(
-            {"order_id": order_id},
-            {"$set": order_asset}
-        )
-    else:
-        db["order_asset"].insert_one(order_asset)
+    db["order_asset"].update_one(
+        {"order_id": order_id},
+        {"$set": order_asset},
+        upsert=True
+    )
 
     return order_asset
-
+# ! Update getting url for downloadable image
 def download_image(order_id, user_id, db):
     user = db["user"].find_one({"user_id": user_id})
     if not user: # Make sure order exists
@@ -436,9 +537,17 @@ def download_image(order_id, user_id, db):
     if order_asset["client_id"] != user_id:
         raise HTTPException(status_code=403, detail="Only the client can download artwork")
     
+    try:
+        download_url = s3_service.get_presigned_download_url(
+            order_asset["unwatermarked_key"],
+            expires_in=300
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Could not generate download URL: {str(e)}")
     order_image = {
         "order_id": order_id,
-        "unwatermarked_key": order_asset["unwatermarked_key"]
+        "unwatermarked_key": order_asset["unwatermarked_key"],
+        "download_url": download_url
     }
 
     return order_image
@@ -513,8 +622,18 @@ def upload_profile_picture(upload_file: UploadFile, user_id, db):
     if not user: # Make sure order exists
         raise HTTPException(status_code=404, detail="User not found")
     
-    # ! TODO: Replace this when S3 is done and we can actually retrieve
-    pfp_key = f"users/{user_id}/pfp/current.png"
+    try:
+        upload_file.file.seek(0)
+        result = s3_service.upload_pfp(
+            file_obj=upload_file.file,
+            user_id=user_id,
+            filename="current.png",
+            content_type=upload_file.content_type or "image/png"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to upload profile picture: {str(e)}")
+    
+    pfp_key = result["key"]
 
     db["user"].update_one(
         {"user_id": user_id},
@@ -529,3 +648,98 @@ def upload_profile_picture(upload_file: UploadFile, user_id, db):
     }
 
 ################################################################
+
+# Helper function attach pfp url
+def attach_pfp_url(user_doc: dict) -> dict:
+    if not user_doc:
+        return user_doc
+    
+    user_copy = dict(user_doc)
+
+    pfp_key = user_copy.get("pfp_key")
+    if pfp_key:
+        try:
+            user_copy["pfp_url"] = s3_service.get_presigned_download_url(pfp_key)
+        except Exception:
+            user_copy["pfp_url"] = None
+    else:
+        user_copy["pfp_url"] = None
+    return user_copy
+
+def attach_image_url(image_doc: dict) -> dict:
+    if not image_doc:
+        return image_doc
+    
+    image_copy = dict(image_doc)
+
+    image_key = image_copy.get("image_key")
+    if image_key:
+        try:
+            image_copy["image_url"] = s3_service.get_presigned_download_url(image_key)
+        except Exception:
+            image_copy["image_url"] = None
+    else:
+        image_copy["image_url"] = None
+    return image_copy
+
+def attach_user_summary_pfp(user_summary: dict) -> dict:
+    if not user_summary:
+        return user_summary
+    
+    user_copy = dict(user_summary)
+
+    pfp_key = user_copy.get("pfp_key")
+    if pfp_key:
+        try:
+            user_copy["pfp_url"] = s3_service.get_presigned_download_url(pfp_key)
+        except Exception:
+            user_copy["pfp_url"] = None
+    else:
+        user_copy["pfp_url"] = None
+    return user_copy
+
+def attach_order_pfps(order_doc: dict) -> dict:
+    if not order_doc:
+        return order_doc
+    
+    order_copy = dict(order_doc)
+
+    if order_copy.get("client"):
+        order_copy["client"] = attach_user_summary_pfp(order_copy["client"])
+    if order_copy.get("artist"):
+        order_copy["artist"] = attach_user_summary_pfp(order_copy["artist"])
+
+    return order_copy
+
+def attach_order_asset_urls(order_doc: dict, db) -> dict:
+    if not order_doc:
+        return order_doc
+    
+    order_copy = dict(order_doc)
+
+    order_asset = db["order_asset"].find_one(
+        {"order_id": order_copy["order_id"]},
+        {"_id": 0}
+    )
+
+    if not order_asset:
+        order_copy["watermarked_key"] = None
+        order_copy["watermarked_url"] = None
+        order_copy["unwatermarked_key"] = None
+        return order_copy
+    
+    order_copy["watermarked_key"] = order_asset.get("watermarked_key")
+    order_copy["unwatermarked_key"] = order_asset.get("unwatermarked_key")
+
+    watermarked_key = order_asset.get("watermarked_key")
+    if watermarked_key:
+        try:
+            order_copy["watermarked_url"] = s3_service.get_presigned_download_url(
+                watermarked_key,
+                expires_in=300
+            )
+        except Exception:
+            order_copy["watermarked_url"] = None
+    else:
+        order_copy["watermarked_url"] = None
+    return order_copy

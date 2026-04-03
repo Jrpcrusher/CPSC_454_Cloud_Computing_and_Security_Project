@@ -73,7 +73,7 @@ def view_orders_as_client(current_user=Depends(get_current_user), db = Depends(g
 def view_orders_as_artist(current_user=Depends(get_current_user), db = Depends(get_db)):
     return db_service.get_orders(current_user["user_id"], "artist", db)
 
-@router.get("/me/orders/{order_id}", response_model=Order) # View single order
+@router.get("/me/orders/{order_id}", response_model=OrderDetail) # View single order
 def view_order(order_id: str, current_user=Depends(get_current_user), db = Depends(get_db)):
     return db_service.get_order(current_user["user_id"], order_id, db)
 

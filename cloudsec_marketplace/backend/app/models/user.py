@@ -18,7 +18,8 @@ class PublicProfile(BaseModel): # Return a users public profile
     register_date: datetime
     role: UserRole
     pfp_key: str | None = None
-    description: str | None = Field(max_length=500)
+    pfp_url: str | None = None
+    description: str | None = Field(default=None, max_length=500)
 
 class ViewMe(BaseModel): # For viewing own profile
     user_id: UUID
@@ -27,7 +28,8 @@ class ViewMe(BaseModel): # For viewing own profile
     register_date: datetime
     role: UserRole
     pfp_key: str | None = None
-    description: str | None = Field(max_length=500)
+    pfp_url: str | None = None
+    description: str | None = Field(default=None, max_length=500)
 
 class UpdateSettings(BaseModel): # What is needed for updating settings
     username: str | None = Field(default=None, min_length=3, max_length=30)
@@ -38,8 +40,9 @@ class UpdateSettings(BaseModel): # What is needed for updating settings
 class Settings(BaseModel): # For viewing settings
     username: str = Field(min_length=3, max_length=30)
     email: EmailStr
-    pfp_key: str | None
-    description: str | None = Field(max_length=500)
+    pfp_key: str | None = None
+    pfp_url: str | None = None
+    description: str | None = Field(default=None, max_length=500)
 
 class UserProfileAdminView(BaseModel): # For viewing profile as admin
     user_id: UUID
@@ -47,13 +50,15 @@ class UserProfileAdminView(BaseModel): # For viewing profile as admin
     email: EmailStr
     register_date: datetime
     role: UserRole
-    description: str | None = Field(max_length=500)
+    description: str | None = Field(default=None, max_length=500)
     pfp_key: str | None = None
+    pfp_url: str | None = None
 
 class UserPermissions(BaseModel): # For viewing permissions of user
     username: str = Field(min_length=3, max_length=30)
     role: UserRole
     pfp_key: str | None = None
+    pfp_url: str | None = None
 
 class LoginRequest(BaseModel): # For handling user login requests
     email: EmailStr
@@ -64,3 +69,4 @@ class UserSummary(BaseModel): # Information about the user
     user_id: UUID
     username: str = Field(min_length=3, max_length=30)
     pfp_key: str | None = None
+    pfp_url: str | None = None
