@@ -91,7 +91,18 @@ def decline_order(order_id: str, current_user=Depends(get_current_user), db = De
 
 @router.post("/me/orders/{order_id}/upload", response_model=OrderAsset)
 def upload_order_image(order_id: str, image: UploadFile = File(...), current_user=Depends(get_current_user), db = Depends(get_db)):
-    return db_service.upload_order_image(image, order_id, current_user["user_id"], db)
+    result = db_service.upload_order_image(image, order_id, current_user["user_id"], db)
+
+    # If there's an active transaction, stamp uploaded_at and check escrow
+    active_txn = db["transaction"].find_one({
+        "order_id": order_id,
+        "status": {"$in": ["pending", "funds_held"]}
+    })
+    if active_txn:
+        from app.services.payment_service import mark_art_uploaded_for_escrow
+        mark_art_uploaded_for_escrow(order_id=order_id, db=db)
+
+    return result
 
 @router.get("/me/orders/{order_id}/download", response_model=OrderDownloadResponse)
 def download_image(order_id: str, current_user=Depends(get_current_user), db = Depends(get_db)):
@@ -101,5 +112,15 @@ def download_image(order_id: str, current_user=Depends(get_current_user), db = D
 def approve_order(order_id: str, current_user=Depends(get_current_user), db = Depends(get_db)):
     result = db_service.approve_order(order_id, current_user["user_id"], db)
     if result["client_approval"] and result["artist_approval"]:
-        db_service.release_image(order_id, current_user["user_id"], db)
+        # If there's a held escrow transaction, release through the payment system
+        escrow_txn = db["transaction"].find_one({
+            "order_id": order_id,
+            "status": "funds_held"
+        })
+        if escrow_txn:
+            from app.services.payment_service import check_escrow_ready
+            check_escrow_ready(order_id, db)
+        else:
+            # No payment — release art directly (non-escrow path)
+            db_service.release_image(order_id, current_user["user_id"], db)
     return result

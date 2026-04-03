@@ -40,17 +40,19 @@ def _create_transaction(test_db, order_id, buyer_id, artist_id, status="pending"
     return txn
 
 
-def _create_escrow_asset(test_db, order_id, released=False):
-    """Insert an escrow_asset document directly into the DB for testing."""
+def _create_order_asset(test_db, order_id, released=False):
+    """Insert an order_asset document directly into the DB for testing."""
     asset = {
         "order_id": order_id,
-        "s3_watermarked_path": f"watermarked/{order_id}.png",
-        "s3_unwatermarked_path": f"unwatermarked/{order_id}.png",
-        "unwatermarked_uploaded": True,
+        "artist_id": "test_artist",
+        "client_id": "test_client",
+        "watermarked_key": f"watermarked/{order_id}.png",
+        "unwatermarked_key": f"unwatermarked/{order_id}.png",
+        "art_uploaded": True,
         "released_to_buyer": released,
         "uploaded_at": datetime.utcnow().isoformat(),
     }
-    test_db["escrow_asset"].insert_one(asset)
+    test_db["order_asset"].insert_one(asset)
     return asset
 
 
@@ -378,7 +380,7 @@ def test_check_escrow_not_ready_missing_approval(test_db, test_order, mock_strip
         artist_id=test_order["artist"]["user_id"],
         status="funds_held",
     )
-    _create_escrow_asset(test_db, test_order["order_id"])
+    _create_order_asset(test_db, test_order["order_id"])
 
     # Only artist approved, client has NOT approved
     test_db["order"].update_one(
@@ -403,7 +405,7 @@ def test_check_escrow_ready_all_conditions(test_db, test_order, mock_stripe):
         artist_id=test_order["artist"]["user_id"],
         status="funds_held",
     )
-    _create_escrow_asset(test_db, test_order["order_id"])
+    _create_order_asset(test_db, test_order["order_id"])
 
     # Set both approvals
     test_db["order"].update_one(
@@ -422,7 +424,7 @@ def test_check_escrow_ready_all_conditions(test_db, test_order, mock_stripe):
     assert order["status"] == "completed", "Order should be 'completed' after escrow release"
 
     # Art should be released to buyer
-    asset = test_db["escrow_asset"].find_one({"order_id": test_order["order_id"]})
+    asset = test_db["order_asset"].find_one({"order_id": test_order["order_id"]})
     assert asset["released_to_buyer"] is True, "Art should be released to buyer"
 
 
@@ -435,7 +437,7 @@ def test_escrow_release_atomic_no_double_execute(test_db, test_order, mock_strip
         artist_id=test_order["artist"]["user_id"],
         status="funds_held",
     )
-    _create_escrow_asset(test_db, test_order["order_id"])
+    _create_order_asset(test_db, test_order["order_id"])
 
     test_db["order"].update_one(
         {"order_id": test_order["order_id"]},
@@ -466,7 +468,7 @@ def test_escrow_release_order(test_db, test_order, artist_user, mock_stripe):
         artist_id=artist_user["user_id"],
         status="funds_held",
     )
-    _create_escrow_asset(test_db, test_order["order_id"])
+    _create_order_asset(test_db, test_order["order_id"])
 
     test_db["order"].update_one(
         {"order_id": test_order["order_id"]},
@@ -507,7 +509,7 @@ def test_escrow_release_order(test_db, test_order, artist_user, mock_stripe):
     order = test_db["order"].find_one({"order_id": test_order["order_id"]})
     assert order["status"] == "completed", "Order should be 'completed'"
 
-    asset = test_db["escrow_asset"].find_one({"order_id": test_order["order_id"]})
+    asset = test_db["order_asset"].find_one({"order_id": test_order["order_id"]})
     assert asset["released_to_buyer"] is True, "Art should be released to buyer"
 
 
@@ -683,8 +685,8 @@ def test_status_route_stranger_forbidden(client, test_db, test_order, stranger_h
 
 def test_download_requires_completed_order(client, test_db, test_order, buyer_headers, mock_stripe):
     """Download rejected if order is not in 'completed' status."""
-    # Create released escrow asset but order is still 'received'
-    _create_escrow_asset(test_db, test_order["order_id"], released=True)
+    # Create released order asset but order is still 'received'
+    _create_order_asset(test_db, test_order["order_id"], released=True)
 
     response = client.get(
         f"/payments/{test_order['order_id']}/download",
@@ -697,7 +699,7 @@ def test_download_requires_completed_order(client, test_db, test_order, buyer_he
 
 def test_download_buyer_only(client, test_db, test_order, artist_headers, mock_stripe):
     """Non-buyer (artist) gets 403 when trying to download."""
-    _create_escrow_asset(test_db, test_order["order_id"], released=True)
+    _create_order_asset(test_db, test_order["order_id"], released=True)
 
     test_db["order"].update_one(
         {"order_id": test_order["order_id"]},
@@ -711,3 +713,258 @@ def test_download_buyer_only(client, test_db, test_order, artist_headers, mock_s
 
     assert response.status_code == 403, \
         f"Artist should get 403 for download, got {response.status_code}"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Artist Stripe Connect Onboarding
+# ═══════════════════════════════════════════════════════════════════════════
+
+def test_onboard_artist_creates_account(client, test_db, artist_no_stripe_user, artist_no_stripe_headers, mock_stripe):
+    """POST /payments/artist/onboard creates a Stripe Connect account and returns onboarding URL."""
+    mock_account = MagicMock()
+    mock_account.id = "acct_test123"
+
+    mock_link = MagicMock()
+    mock_link.url = "https://connect.stripe.com/test"
+
+    with patch("stripe.Account.create", return_value=mock_account) as mock_create, \
+         patch("stripe.AccountLink.create", return_value=mock_link) as mock_link_create:
+
+        response = client.post("/payments/artist/onboard", headers=artist_no_stripe_headers)
+
+    assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.json()}"
+    data = response.json()
+    assert data["onboarding_url"] == "https://connect.stripe.com/test"
+
+    # stripe_account_id should be stored on the user document
+    user = test_db["user"].find_one({"user_id": artist_no_stripe_user["user_id"]})
+    assert user["stripe_account_id"] == "acct_test123", \
+        "stripe_account_id should be stored on the user document"
+
+    # Stripe Account.create was called with the artist's email
+    mock_create.assert_called_once()
+    assert mock_create.call_args.kwargs["email"] == artist_no_stripe_user["email"]
+
+
+def test_onboard_status_not_started(client, artist_no_stripe_headers, mock_stripe):
+    """Artist with no stripe_account_id → returns status 'not_started'."""
+    response = client.get("/payments/artist/onboard/status", headers=artist_no_stripe_headers)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "not_started"
+
+
+def test_onboard_status_complete(client, artist_user, artist_headers, mock_stripe):
+    """Artist with fully onboarded Stripe account → returns status 'complete'."""
+    mock_account = MagicMock()
+    mock_account.charges_enabled = True
+    mock_account.payouts_enabled = True
+
+    with patch("stripe.Account.retrieve", return_value=mock_account):
+        response = client.get("/payments/artist/onboard/status", headers=artist_headers)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "complete"
+    assert data["charges_enabled"] is True
+    assert data["payouts_enabled"] is True
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Upload → Escrow Bridge
+# ═══════════════════════════════════════════════════════════════════════════
+
+def test_upload_stamps_uploaded_at_for_escrow(client, test_db, accepted_order, artist_headers, artist_user, mock_stripe):
+    """Upload with active transaction stamps uploaded_at on order_asset for escrow tracking."""
+    order_id = accepted_order["order_id"]
+
+    # Create an active transaction for this order
+    _create_transaction(
+        test_db,
+        order_id=order_id,
+        buyer_id=accepted_order["client"]["user_id"],
+        artist_id=artist_user["user_id"],
+        status="funds_held",
+    )
+
+    # Mock db_service.upload_order_image to skip S3/watermark.
+    # This mock also inserts the order_asset doc into the DB (simulating what
+    # the real function does), so mark_art_uploaded_for_escrow can find it.
+    fake_order_asset = {
+        "order_id": order_id,
+        "artist_id": artist_user["user_id"],
+        "client_id": accepted_order["client"]["user_id"],
+        "unwatermarked_key": f"unwatermarked/{order_id}.png",
+        "watermarked_key": f"watermarked/{order_id}.png",
+        "art_uploaded": True,
+        "released_to_buyer": False,
+    }
+
+    def mock_upload(*args, **kwargs):
+        test_db["order_asset"].insert_one({**fake_order_asset})
+        return fake_order_asset
+
+    with patch("app.api.routes.users.db_service.upload_order_image", side_effect=mock_upload):
+        response = client.post(
+            f"/user/me/orders/{order_id}/upload",
+            files={"image": ("art.png", b"fake_image_data", "image/png")},
+            headers=artist_headers,
+        )
+
+    assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.json()}"
+
+    # order_asset should have uploaded_at stamped by mark_art_uploaded_for_escrow
+    asset = test_db["order_asset"].find_one({"order_id": order_id})
+    assert asset is not None, "order_asset should exist"
+    assert asset["art_uploaded"] is True
+    assert "uploaded_at" in asset, "uploaded_at should be stamped when a transaction exists"
+
+
+def test_upload_no_transaction_skips_escrow(client, test_db, accepted_order, artist_headers, artist_user, mock_stripe):
+    """Upload without a transaction writes to order_asset only, no escrow timestamp."""
+    order_id = accepted_order["order_id"]
+
+    fake_order_asset = {
+        "order_id": order_id,
+        "artist_id": artist_user["user_id"],
+        "client_id": accepted_order["client"]["user_id"],
+        "unwatermarked_key": f"unwatermarked/{order_id}.png",
+        "watermarked_key": f"watermarked/{order_id}.png",
+        "art_uploaded": True,
+        "released_to_buyer": False,
+    }
+
+    with patch("app.api.routes.users.db_service.upload_order_image", return_value=fake_order_asset):
+        response = client.post(
+            f"/user/me/orders/{order_id}/upload",
+            files={"image": ("art.png", b"fake_image_data", "image/png")},
+            headers=artist_headers,
+        )
+
+    assert response.status_code == 200
+
+    # order_asset should NOT have uploaded_at (no escrow tracking without transaction)
+    asset = test_db["order_asset"].find_one({"order_id": order_id})
+    assert asset is None, "No order_asset doc should exist (mock didn't insert one, no escrow bridge)"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Approve → Escrow Bridge
+# ═══════════════════════════════════════════════════════════════════════════
+
+def test_approve_with_escrow_triggers_release(client, test_db, accepted_order, buyer_headers, artist_user, mock_stripe):
+    """Both approvals + funds_held transaction → goes through escrow release (capture, payout, release)."""
+    order_id = accepted_order["order_id"]
+
+    # Artist already approved
+    test_db["order"].update_one(
+        {"order_id": order_id},
+        {"$set": {"artist_approval": True}},
+    )
+
+    # Transaction with funds held
+    txn = _create_transaction(
+        test_db,
+        order_id=order_id,
+        buyer_id=accepted_order["client"]["user_id"],
+        artist_id=artist_user["user_id"],
+        status="funds_held",
+    )
+
+    # order_asset with art uploaded (created during the upload step in real flow)
+    _create_order_asset(test_db, order_id)
+
+    # Buyer approves → triggers escrow release
+    response = client.post(
+        f"/user/me/orders/{order_id}/approve",
+        headers=buyer_headers,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["client_approval"] is True
+    assert data["artist_approval"] is True
+
+    # Stripe capture should have been called (escrow path)
+    mock_stripe.payment_intents.capture.assert_called_once_with(txn["stripe_payment_intent_id"])
+
+    # Transaction should be payout_sent (full release completed)
+    final_txn = test_db["transaction"].find_one({"order_id": order_id})
+    assert final_txn["status"] == "payout_sent", \
+        f"Transaction should be 'payout_sent' after escrow release, got '{final_txn['status']}'"
+
+    # Order should be completed
+    order = test_db["order"].find_one({"order_id": order_id})
+    assert order["status"] == "completed"
+
+    # order_asset should have released_to_buyer=True
+    order_asset = test_db["order_asset"].find_one({"order_id": order_id})
+    assert order_asset is not None, "order_asset should exist"
+    assert order_asset["released_to_buyer"] is True
+
+
+def test_approve_without_escrow_releases_directly(client, test_db, accepted_order, buyer_user, buyer_headers, artist_user, mock_stripe):
+    """Both approvals but no transaction → releases art directly via db_service.release_image."""
+    order_id = accepted_order["order_id"]
+
+    # Artist already approved
+    test_db["order"].update_one(
+        {"order_id": order_id},
+        {"$set": {"artist_approval": True}},
+    )
+
+    # Create order_asset (art uploaded, not released) — needed for release_image
+    test_db["order_asset"].insert_one({
+        "order_id": order_id,
+        "artist_id": artist_user["user_id"],
+        "client_id": buyer_user["user_id"],
+        "unwatermarked_key": f"unwatermarked/{order_id}.png",
+        "watermarked_key": f"watermarked/{order_id}.png",
+        "art_uploaded": True,
+        "released_to_buyer": False,
+    })
+
+    # NO transaction — non-escrow path
+
+    # Buyer approves → triggers direct release
+    response = client.post(
+        f"/user/me/orders/{order_id}/approve",
+        headers=buyer_headers,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["client_approval"] is True
+    assert data["artist_approval"] is True
+
+    # Stripe should NOT have been called (no escrow)
+    mock_stripe.payment_intents.capture.assert_not_called()
+
+    # order_asset should be released
+    order_asset = test_db["order_asset"].find_one({"order_id": order_id})
+    assert order_asset["released_to_buyer"] is True, \
+        "order_asset should be released directly"
+
+    # Order should be completed
+    order = test_db["order"].find_one({"order_id": order_id})
+    assert order["status"] == "completed"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Bug Fix: matched_count
+# ═══════════════════════════════════════════════════════════════════════════
+
+def test_accept_order_works(client, test_db, test_order, artist_headers, mock_stripe):
+    """Artist can accept an order (verifies the matched_count fix)."""
+    response = client.patch(
+        f"/user/me/orders/{test_order['order_id']}/accept",
+        headers=artist_headers,
+    )
+
+    assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.json()}"
+    assert response.json()["status"] == "accepted"
+
+    # Verify in DB
+    order = test_db["order"].find_one({"order_id": test_order["order_id"]})
+    assert order["status"] == "accepted"

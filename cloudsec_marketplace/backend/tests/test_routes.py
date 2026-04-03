@@ -93,12 +93,12 @@ def test_get_settings(client, registered_user, auth_headers):
 
     assert data["username"] == registered_user["username"]
     assert data["email"] == registered_user["email"]
-    assert data["pfp_path"] is None
+    assert data["pfp_key"] is None
     assert data["description"] is None
 
 def test_change_settings_single(client, auth_headers):
     payload = {
-        "pfp_path" : "new/path/image.png"
+        "pfp_key" : "new/path/image.png"
     }
     response = client.patch(
         "/user/me/settings",
@@ -107,7 +107,7 @@ def test_change_settings_single(client, auth_headers):
     
     assert response.status_code == 200
     data = response.json()
-    assert data["pfp_path"] == payload["pfp_path"]
+    assert data["pfp_key"] == payload["pfp_key"]
 
 def test_change_settings_none(client, registered_user, auth_headers):
     response = client.patch(
@@ -119,12 +119,12 @@ def test_change_settings_none(client, registered_user, auth_headers):
     data = response.json()
     assert data["username"] == registered_user["username"]
     assert data["email"] == registered_user["email"]
-    assert data["pfp_path"] is None
+    assert data["pfp_key"] is None
     assert data["description"] is None
 
 def test_change_settings_many(client, auth_headers):
     payload = {
-        "pfp_path" : "new/path/image.png",
+        "pfp_key" : "new/path/image.png",
         "description": "new description",
         "username": "newusername",
         "email": "newemail@example.com"
@@ -139,7 +139,7 @@ def test_change_settings_many(client, auth_headers):
     data = response.json()
     assert data["username"] == "newusername"
     assert data["email"] == "newemail@example.com"
-    assert data["pfp_path"] == "new/path/image.png"
+    assert data["pfp_key"] == "new/path/image.png"
     assert data["description"] == "new description"
 
 def test_change_existing_user_info(client, auth_headers):
