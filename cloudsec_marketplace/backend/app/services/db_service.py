@@ -463,38 +463,47 @@ def upload_order_image(upload_file: UploadFile, order_id, user_id, db):
     unwatermarked_name = f"original_{original_name}"
     watermarked_name = f"watermarked_{original_name}"
 
-    with tempfile.TemporaryDirectory() as tempdir:
-        original_path = os.path.join(tempdir, original_name)
-        watermarked_path = os.path.join(tempdir, watermarked_name)
+    try:
+        with tempfile.TemporaryDirectory() as tempdir:
+            original_path = os.path.join(tempdir, original_name)
+            watermarked_path = os.path.join(tempdir, watermarked_name)
+            watermark_local_path = os.path.join(tempdir, "watermark.png")
 
-        upload_file.file.seek(0)
-        with open(original_path, "wb") as f:
-            shutil.copyfileobj(upload_file.file, f)
+            upload_file.file.seek(0)
+            with open(original_path, "wb") as f:
+                shutil.copyfileobj(upload_file.file, f)
 
-        # make the watermarked version
-        watermark.full_watermark(
-            input_image_path=original_path,
-            watermark_path="", # ! TODO: Give path to watermark image
-            output_image_path=watermarked_path,
-        )
-
-        # Now upload the original
-        with open(original_path, "rb") as original_file:
-            original_result = s3_service.upload_order_image(
-                file_obj=original_file,
-                order_id=order_id,
-                file_name=unwatermarked_name,
-                content_type=upload_file.content_type or "image/png"
+            s3_service.download_to_path(
+                s3_service.get_private_watermark_key(),
+                watermark_local_path
             )
 
-        # Upload the watermarked version
-        with open(watermarked_path, "rb") as watermarked_file:
-            watermarked_result = s3_service.upload_order_image(
-                file_obj=watermarked_file,
-                order_id=order_id,
-                file_name=watermarked_name,
-                content_type=upload_file.content_type or "image/png"
+            # make the watermarked version
+            watermark.full_watermark(
+                input_image_path=original_path,
+                watermark_path=watermark_local_path,
+                output_image_path=watermarked_path,
             )
+
+            # Now upload the original
+            with open(original_path, "rb") as original_file:
+                original_result = s3_service.upload_order_image(
+                    file_obj=original_file,
+                    order_id=order_id,
+                    file_name=unwatermarked_name,
+                    content_type=upload_file.content_type or "image/png"
+                )
+
+            # Upload the watermarked version
+            with open(watermarked_path, "rb") as watermarked_file:
+                watermarked_result = s3_service.upload_order_image(
+                    file_obj=watermarked_file,
+                    order_id=order_id,
+                    file_name=watermarked_name,
+                    content_type=upload_file.content_type or "image/png"
+                )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to upload image to order: {str(e)}")
 
     order_asset = {
         "order_id": order_id,
@@ -513,7 +522,7 @@ def upload_order_image(upload_file: UploadFile, order_id, user_id, db):
     )
 
     return order_asset
-# ! Update getting url for downloadable image
+
 def download_image(order_id, user_id, db):
     user = db["user"].find_one({"user_id": user_id})
     if not user: # Make sure order exists

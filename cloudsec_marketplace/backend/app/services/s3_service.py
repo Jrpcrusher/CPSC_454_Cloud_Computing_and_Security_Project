@@ -180,3 +180,12 @@ class S3Service:
             raise FileNotFoundError(f"Order image not found for key: {key}")
 
         return self.get_presigned_download_url(key, expires_in=expires_in)
+    
+    def get_private_watermark_key(self) -> str:
+        return "private/images/watermark.png"
+    
+    def download_to_path(self, key: str, local_path: str) -> None:
+        try:
+            self.s3.download_file(self.bucket_name, key, local_path)
+        except ClientError as e:
+            raise RuntimeError(f"Could not download S3 object {key}: {str(e)}")
