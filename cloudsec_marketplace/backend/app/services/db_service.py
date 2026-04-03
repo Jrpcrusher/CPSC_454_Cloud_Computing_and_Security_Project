@@ -5,7 +5,7 @@ from fastapi import  HTTPException, UploadFile
 from app.models.user import *
 import uuid
 import re
-from ...watermark import watermark
+from watermark import watermark
 from .s3_service import S3Service
 import tempfile
 import os

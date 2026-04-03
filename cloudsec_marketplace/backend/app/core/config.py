@@ -9,8 +9,9 @@ class Settings(BaseSettings):
     STRIPE_WEBHOOK_SECRET: str | None = None    # Secret for verifying Stripe webhook signatures
     PLATFORM_FEE_PERCENT: float = 0.10         # Platform commission percentage (e.g. 10%)
     AWS_REGION: str | None = None               # We have the AWS region, or not
+    AWS_S3_BUCKET_NAME: str
     SECRET_KEY: str # the key to hash with
-
+    
     ALGORITHM: ClassVar[str] = "HS256" # Signing Algorithm we chose, HMAC + SHA-256
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 # How long our token is valid for
 
