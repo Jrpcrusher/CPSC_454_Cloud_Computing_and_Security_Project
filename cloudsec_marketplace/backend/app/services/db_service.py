@@ -258,7 +258,7 @@ def create_user(user, db):
     return {"created": True, "user_id": new_user["user_id"]}
 
 def get_credentials(request, db):
-    user = db["user"].find_one({"email": request.email}) # try to find the user via email
+    user = db["user"].find_one({"username": request.username}) # try to find the user via email
     if not user: # if the user doesnt exist, fail immediately
         return None
     try: # Try to verify password
@@ -480,14 +480,15 @@ def upload_order_image(upload_file: UploadFile, order_id, user_id, db):
     if order["status"] != "accepted":
         raise HTTPException(status_code=400, detail="Cannot upload to an unaccepted request")
     
-    original_name = upload_file.filename or "artwork.png"
-    unwatermarked_name = f"original_{original_name}"
-    watermarked_name = f"watermarked_{original_name}"
+    unwatermarked_name = "unwatermarked.png"
+    watermarked_name = "watermarked.png"
 
+    original_result = None
+    watermarked_result = None
     try:
         with tempfile.TemporaryDirectory() as tempdir:
-            original_path = os.path.join(tempdir, original_name)
-            watermarked_path = os.path.join(tempdir, watermarked_name)
+            original_path = os.path.join(tempdir, "original_upload")
+            watermarked_path = os.path.join(tempdir, "watermarked_output.png")
             watermark_local_path = os.path.join(tempdir, "watermark.png")
 
             upload_file.file.seek(0)
@@ -523,6 +524,7 @@ def upload_order_image(upload_file: UploadFile, order_id, user_id, db):
                     file_name=watermarked_name,
                     content_type=upload_file.content_type or "image/png"
                 )
+                
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to upload image to order: {str(e)}")
 
