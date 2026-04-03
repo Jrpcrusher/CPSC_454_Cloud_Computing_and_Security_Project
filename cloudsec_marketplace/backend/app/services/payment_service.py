@@ -57,19 +57,19 @@ def create_payment_intent(order_id: str, buyer_id: str, artist_id: str,
     order = db["order"].find_one({"order_id": order_id})
     if not order:
         raise HTTPException(status_code=404, detail="Order not found.")
-    if order.get("status") != "awaiting_payment":
+    if order.get("status") != "received":
         raise HTTPException(
             status_code=400,
-            detail=f"Order is not awaiting payment. Current status: {order.get('status')}"
+            detail=f"Payment can only be started for orders in 'received' status. Current status: {order.get('status')}"
         )
 
-    # Check no existing transaction for this order
+    # Check no existing active transaction for this order
     existing = db["transaction"].find_one({
         "order_id": order_id,
-        "status": {"$nin": ["failed", "cancelled", "refunded"]}
+        "status": {"$nin": ["failed", "refunded", "canceled"]}
     })
     if existing:
-        raise HTTPException(status_code=400, detail="A payment already exists for this order.")
+        raise HTTPException(status_code=400, detail="Active transaction already exists for this order.")
 
     # Create the Stripe PaymentIntent — manual capture holds funds without charging
     try:
@@ -104,6 +104,12 @@ def create_payment_intent(order_id: str, buyer_id: str, artist_id: str,
     }
     db["transaction"].insert_one(transaction)
 
+    # Link the transaction back to the order
+    db["order"].update_one(
+        {"order_id": order_id},
+        {"$set": {"transaction_id": transaction["transaction_id"]}},
+    )
+
     return {
         "client_secret": intent.client_secret,
         "transaction_id": transaction["transaction_id"],
@@ -118,7 +124,8 @@ def create_payment_intent(order_id: str, buyer_id: str, artist_id: str,
 def handle_payment_intent_authorized(payment_intent: dict, db):
     """
     Called when `payment_intent.amount_capturable_updated` fires.
-    Funds are authorized and held — update transaction + order status.
+    Funds are authorized and held — update transaction status only.
+    Order status is managed by the order workflow (accept/decline/etc.).
     """
     pi_id = payment_intent["id"]
     txn = db["transaction"].find_one({"stripe_payment_intent_id": pi_id})
@@ -133,12 +140,6 @@ def handle_payment_intent_authorized(payment_intent: dict, db):
         {"$set": {"status": "funds_held", "updated_at": now}}
     )
 
-    # Update order -> received (artist can now see the commission)
-    db["order"].update_one(
-        {"order_id": txn["order_id"]},
-        {"$set": {"status": "received"}}
-    )
-
     # Check if escrow is ready (in case art was uploaded before payment)
     check_escrow_ready(txn["order_id"], db)
 
@@ -146,15 +147,23 @@ def handle_payment_intent_authorized(payment_intent: dict, db):
 def handle_payment_intent_succeeded(payment_intent: dict, db):
     """
     Called when `payment_intent.succeeded` fires (funds captured).
-    Update transaction status to released.
+    Update transaction status to released — but only if the transaction
+    hasn't already progressed past this state (e.g. to payout_sent).
     """
     pi_id = payment_intent["id"]
     now = datetime.utcnow().isoformat()
 
-    db["transaction"].update_one(
-        {"stripe_payment_intent_id": pi_id},
-        {"$set": {"status": "released", "updated_at": now}}
+    result = db["transaction"].update_one(
+        {
+            "stripe_payment_intent_id": pi_id,
+            "status": {"$nin": ["released", "payout_sent"]},
+        },
+        {"$set": {"status": "released", "updated_at": now}},
     )
+
+    if result.matched_count == 0:
+        # Transaction already at released/payout_sent — nothing to do
+        return
 
 
 def handle_payment_intent_failed(payment_intent: dict, db):
@@ -176,7 +185,28 @@ def handle_payment_intent_failed(payment_intent: dict, db):
 
     db["order"].update_one(
         {"order_id": txn["order_id"]},
-        {"$set": {"status": "cancelled"}}
+        {"$set": {"status": "declined"}}
+    )
+
+
+def handle_payment_intent_canceled(payment_intent: dict, db):
+    """
+    Called when `payment_intent.canceled` fires (intent canceled or hold expired).
+    This is NOT a payment failure — the hold simply lapsed or was explicitly canceled.
+
+    Sets transaction status to 'canceled'. Does NOT change order status;
+    the order workflow (accept/decline) owns that transition.
+    """
+    pi_id = payment_intent["id"]
+    now = datetime.utcnow().isoformat()
+
+    txn = db["transaction"].find_one({"stripe_payment_intent_id": pi_id})
+    if not txn:
+        return  # Unknown transaction — ignore
+
+    db["transaction"].update_one(
+        {"stripe_payment_intent_id": pi_id},
+        {"$set": {"status": "canceled", "updated_at": now}},
     )
 
 
@@ -186,75 +216,149 @@ def handle_payment_intent_failed(payment_intent: dict, db):
 
 def check_escrow_ready(order_id: str, db) -> bool:
     """
-    Check if both escrow conditions are met:
+    Check if ALL 4 escrow conditions are met before releasing:
       1. Funds are held (transaction status == 'funds_held')
-      2. Unwatermarked art has been uploaded
+      2. Unwatermarked art has been uploaded (escrow_asset.unwatermarked_uploaded)
+      3. Client has approved the order (order.client_approval == True)
+      4. Artist has approved the order (order.artist_approval == True)
 
-    If both conditions are met, execute the swap.
+    If all conditions are met, execute the swap.
     Returns True if escrow was released, False otherwise.
     """
-    # Condition 1: Funds held?
+    # Condition 1: Order exists with both approvals?
+    order = db["order"].find_one({"order_id": order_id})
+    if not order:
+        return False
+
+    # Condition 2: Client approved?
+    if not order.get("client_approval", False):
+        return False
+
+    # Condition 3: Artist approved?
+    if not order.get("artist_approval", False):
+        return False
+
+    # Condition 4: Funds held?
     txn = db["transaction"].find_one({"order_id": order_id, "status": "funds_held"})
     if not txn:
         return False
 
-    # Condition 2: Unwatermarked art uploaded?
-    # Check for the unwatermarked asset in the escrow_assets collection
-    # This collection is populated when the artist uploads the final art
+    # Condition 5: Unwatermarked art uploaded?
     asset = db["escrow_asset"].find_one({"order_id": order_id, "unwatermarked_uploaded": True})
     if not asset:
         return False
 
-    # Both conditions met — execute the swap!
+    # All 4 conditions met — execute the swap!
     execute_escrow_release(order_id, txn, db)
     return True
 
 
 def execute_escrow_release(order_id: str, txn: dict, db):
     """
-    THE SWAP: Capture the held funds and release the unwatermarked art.
+    Escrow release sequence. Each step only runs if the prior step succeeded.
 
-    1. Capture the PaymentIntent (moves money from hold -> platform balance)
-    2. Mark unwatermarked art as released (buyer can now download)
-    3. Update transaction status -> released
-    4. Update order status -> completed
-    5. Trigger artist payout
+    Execution order:
+      1. Atomically claim the release (prevent double-execution via race condition)
+      2. Re-verify all 4 escrow conditions against current DB state
+      3. Capture the PaymentIntent (Stripe: authorize -> capture)
+      4. Update transaction status -> released
+      5. Transfer funds to artist via Stripe Connect (payout_artist)
+      6. Update transaction status -> payout_sent
+      7. Mark order as completed
+      8. Release unwatermarked art to buyer (released_to_buyer = True)
+
+    Partial failure scenarios:
+      - Capture fails (step 3): Transaction set to 'failed'. Art NOT released.
+        Recovery: Create a new PaymentIntent and retry.
+      - Payout fails (step 5): Transaction stays at 'released' (funds captured
+        on platform) with a payout_note. Art is NOT released to buyer. Order is
+        NOT marked completed. Manual ops intervention needed to retry the
+        transfer or issue a refund.
+      - Artist has no Stripe Connect account: Same as payout failure — funds
+        captured but art withheld until artist onboards and payout is retried.
     """
+    import logging
+    logger = logging.getLogger(__name__)
+
     client = get_stripe_client()
+    txn_id = txn["transaction_id"]
+
+    # Step 1: Atomically claim the release — prevents double-execution.
+    # Only proceeds if the transaction is still in 'funds_held' state.
+    claimed = db["transaction"].find_one_and_update(
+        {"transaction_id": txn_id, "status": "funds_held"},
+        {"$set": {"updated_at": datetime.utcnow().isoformat()}},
+    )
+    if not claimed:
+        logger.info(
+            f"Escrow release already claimed or transaction not in funds_held: "
+            f"order_id={order_id}, transaction_id={txn_id}"
+        )
+        return
+
+    # Step 2: Re-verify all 4 escrow conditions against current DB state.
+    order = db["order"].find_one({"order_id": order_id})
+    if not order:
+        logger.error(f"Escrow release aborted — order not found: order_id={order_id}")
+        return
+    if not order.get("client_approval") or not order.get("artist_approval"):
+        logger.error(
+            f"Escrow release aborted — missing approvals: order_id={order_id}, "
+            f"client_approval={order.get('client_approval')}, "
+            f"artist_approval={order.get('artist_approval')}"
+        )
+        return
+    asset = db["escrow_asset"].find_one({"order_id": order_id, "unwatermarked_uploaded": True})
+    if not asset:
+        logger.error(f"Escrow release aborted — no unwatermarked art: order_id={order_id}")
+        return
+
     pi_id = txn["stripe_payment_intent_id"]
     now = datetime.utcnow().isoformat()
 
-    # Step 1: Capture the funds on Stripe
+    # Step 3: Capture the PaymentIntent on Stripe.
     try:
         client.payment_intents.capture(pi_id)
     except stripe.StripeError as e:
-        # If capture fails, log and don't complete the swap
         db["transaction"].update_one(
-            {"transaction_id": txn["transaction_id"]},
-            {"$set": {"status": "failed", "updated_at": now}}
+            {"transaction_id": txn_id},
+            {"$set": {"status": "failed", "updated_at": datetime.utcnow().isoformat()}}
         )
         raise HTTPException(status_code=502, detail=f"Failed to capture payment: {str(e)}")
 
-    # Step 2: Release the unwatermarked art to the buyer
-    db["escrow_asset"].update_one(
-        {"order_id": order_id},
-        {"$set": {"released_to_buyer": True, "released_at": now}}
-    )
-
-    # Step 3: Update transaction -> released
+    # Step 4: Transaction -> released (funds captured on platform).
     db["transaction"].update_one(
-        {"transaction_id": txn["transaction_id"]},
-        {"$set": {"status": "released", "updated_at": now}}
+        {"transaction_id": txn_id},
+        {"$set": {"status": "released", "updated_at": datetime.utcnow().isoformat()}},
     )
 
-    # Step 4: Update order -> completed
+    # Step 5: Transfer funds to artist via Stripe Connect.
+    # payout_artist now raises on failure — catch so we can withhold art.
+    try:
+        payout_artist(order_id, txn, db)
+    except Exception as e:
+        # Payout failed (no Connect account or Stripe transfer error).
+        # Funds are captured (transaction='released') but art is NOT released.
+        # Manual intervention needed to retry payout or issue refund.
+        logger.critical(
+            f"PAYOUT FAILED — art withheld: order_id={order_id}, "
+            f"transaction_id={txn_id}, error={str(e)}. "
+            f"Transaction is 'released' (funds captured). "
+            f"Manual intervention required to retry payout or issue refund."
+        )
+        return
+
+    # Step 6: Order -> completed.
     db["order"].update_one(
         {"order_id": order_id},
-        {"$set": {"status": "completed"}}
+        {"$set": {"status": "completed"}},
     )
 
-    # Step 5: Payout the artist
-    payout_artist(order_id, txn, db)
+    # Step 7: Release unwatermarked art to buyer.
+    db["escrow_asset"].update_one(
+        {"order_id": order_id},
+        {"$set": {"released_to_buyer": True, "released_at": datetime.utcnow().isoformat()}},
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -311,24 +415,38 @@ def payout_artist(order_id: str, txn: dict, db):
     """
     Transfer funds from the platform's Stripe balance to the artist's
     connected account. Deducts the platform fee.
+
+    Raises HTTPException on failure so the caller (execute_escrow_release)
+    can withhold art release. Increments payout_attempts on every call
+    so stuck transactions can be queried for retry:
+        db["transaction"].find({"status": "released", "payout_attempts": {"$gt": 0}})
     """
     client = get_stripe_client()
     artist_id = txn["artist_id"]
+    txn_id = txn["transaction_id"]
     now = datetime.utcnow().isoformat()
+
+    # Increment payout_attempts on every call
+    db["transaction"].update_one(
+        {"transaction_id": txn_id},
+        {"$inc": {"payout_attempts": 1}, "$set": {"updated_at": now}},
+    )
 
     # Look up the artist's Stripe connected account
     artist = db["user"].find_one({"user_id": artist_id})
     if not artist or not artist.get("stripe_account_id"):
-        # Artist hasn't onboarded yet — mark for manual payout later
+        # Artist hasn't onboarded — record the blocker and raise so caller knows
         db["transaction"].update_one(
-            {"transaction_id": txn["transaction_id"]},
+            {"transaction_id": txn_id},
             {"$set": {
-                "status": "released",
                 "updated_at": now,
-                "payout_note": "Artist has no Stripe account -- payout pending onboarding.",
+                "payout_note": "Artist has no Stripe Connect account — payout blocked until onboarding.",
             }}
         )
-        return
+        raise HTTPException(
+            status_code=400,
+            detail="Artist must complete Stripe Connect onboarding before payout can be sent.",
+        )
 
     # Calculate payout amount (subtract platform fee)
     platform_fee = int(txn["amount"] * (settings.PLATFORM_FEE_PERCENT / 100))
@@ -342,21 +460,24 @@ def payout_artist(order_id: str, txn: dict, db):
                 "destination": artist["stripe_account_id"],
                 "metadata": {
                     "order_id": order_id,
-                    "transaction_id": txn["transaction_id"],
+                    "transaction_id": txn_id,
                     "platform_fee": str(platform_fee),
                 },
             }
         )
     except stripe.StripeError as e:
-        # Transfer failed — funds are captured but payout didn't go through
+        # Transfer failed — record the error and re-raise so caller can act
         db["transaction"].update_one(
-            {"transaction_id": txn["transaction_id"]},
+            {"transaction_id": txn_id},
             {"$set": {
-                "updated_at": now,
-                "payout_note": f"Payout failed: {str(e)}",
+                "updated_at": datetime.utcnow().isoformat(),
+                "payout_note": f"Stripe transfer failed: {str(e)}",
             }}
         )
-        return
+        raise HTTPException(
+            status_code=502,
+            detail=f"Stripe transfer to artist failed: {str(e)}",
+        )
 
     # Update transaction with payout info
     db["transaction"].update_one(
@@ -396,20 +517,22 @@ def refund_order(order_id: str, db):
         if txn["status"] in ("pending", "funds_held"):
             # Funds only authorized — just cancel the PaymentIntent
             client.payment_intents.cancel(pi_id)
+            final_status = "canceled"
         else:
             # Funds were captured — issue a refund
             client.refunds.create(params={"payment_intent": pi_id})
+            final_status = "refunded"
     except stripe.StripeError as e:
         raise HTTPException(status_code=502, detail=f"Stripe refund error: {str(e)}")
 
     db["transaction"].update_one(
         {"transaction_id": txn["transaction_id"]},
-        {"$set": {"status": "refunded", "updated_at": now}}
+        {"$set": {"status": final_status, "updated_at": now}}
     )
 
     db["order"].update_one(
         {"order_id": order_id},
-        {"$set": {"status": "cancelled"}}
+        {"$set": {"status": "declined"}}
     )
 
     return {"detail": "Refund processed successfully."}
@@ -426,8 +549,19 @@ def register_escrow_asset(order_id: str, s3_watermarked_path: str,
     Registers both the watermarked (for buyer preview) and unwatermarked
     (for release after escrow) versions.
 
+    Requires the order to be in 'accepted' status — the artist must have
+    formally accepted the commission before artwork can be registered.
+
     Then checks if escrow is ready to release.
     """
+    # Guard: order must be accepted before registering escrow assets
+    order = db["order"].find_one({"order_id": order_id})
+    if not order or order.get("status") != "accepted":
+        raise HTTPException(
+            status_code=400,
+            detail="Order must be in 'accepted' status before registering escrow assets.",
+        )
+
     now = datetime.utcnow().isoformat()
 
     # Upsert the escrow asset record
@@ -442,12 +576,6 @@ def register_escrow_asset(order_id: str, s3_watermarked_path: str,
             "uploaded_at": now,
         }},
         upsert=True
-    )
-
-    # Update order status to show artwork is ready for review
-    db["order"].update_one(
-        {"order_id": order_id},
-        {"$set": {"status": "in_progress"}}
     )
 
     # Check if escrow can complete (funds might already be held)
@@ -473,6 +601,10 @@ def get_buyer_download(order_id: str, buyer_id: str, db):
     if not order or order.get("client", {}).get("user_id") != buyer_id:
         raise HTTPException(status_code=403, detail="You are not the buyer for this order.")
 
+    # Verify the order is completed
+    if order.get("status") != "completed":
+        raise HTTPException(status_code=403, detail="Order is not yet completed.")
+
     return {
         "order_id": order_id,
         "s3_unwatermarked_path": asset["s3_unwatermarked_path"],
@@ -485,10 +617,11 @@ def get_buyer_download(order_id: str, buyer_id: str, db):
 # ═══════════════════════════════════════════════════════════════════════════
 
 def get_transaction_by_order(order_id: str, db):
-    """Get the active transaction for an order."""
+    """Get the most recent transaction for an order (sorted by created_at descending)."""
     txn = db["transaction"].find_one(
         {"order_id": order_id},
-        {"_id": 0}
+        {"_id": 0},
+        sort=[("created_at", -1)],
     )
     if not txn:
         raise HTTPException(status_code=404, detail="No transaction found for this order.")
