@@ -47,5 +47,5 @@ class OrderAsset(BaseModel): # The actual order with all image info, release inf
 
 class OrderDetail(Order):
     watermarked_key: str | None = None
-    watermarked_Url: str | None = None
-    unwatermarked_ey: str | None = None
+    watermarked_url: str | None = None
+    unwatermarked_key: str | None = None
