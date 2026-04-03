@@ -61,10 +61,6 @@ class UserPermissions(BaseModel): # For viewing permissions of user
     pfp_key: str | None = None
     pfp_url: str | None = None
 
-class LoginRequest(BaseModel): # For handling user login requests
-    email: EmailStr
-    password: str = Field(min_length=12, max_length=128)
-
 class UserSummary(BaseModel): # Information about the user
     email: EmailStr
     user_id: UUID

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from ...models.user import *
 from app.api.deps import *
 from ...services import db_service
-
+from fastapi.security import OAuth2PasswordRequestForm
 router = APIRouter()
 
 ############################################
@@ -16,7 +16,7 @@ def register(user: CreateUser, db = Depends(get_db) ):
 
 # Login/logout
 @router.post("/login") # Handles logging in the user
-def login(login_request: LoginRequest, db = Depends(get_db)):
+def login(login_request: OAuth2PasswordRequestForm = Depends(), db = Depends(get_db)):
     user = db_service.get_credentials(login_request, db)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid Credentials")
