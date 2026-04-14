@@ -3,10 +3,8 @@ from typing import BinaryIO, Optional
 
 import boto3
 from botocore.exceptions import ClientError
-from dotenv import load_dotenv
+from app.core.config import settings
 
-
-load_dotenv()
 
 
 class S3Service:
@@ -19,8 +17,8 @@ class S3Service:
     """
 
     def __init__(self):
-        self.bucket_name = os.getenv("AWS_S3_BUCKET_NAME")
-        self.region = os.getenv("AWS_REGION", "us-west-2")
+        self.bucket_name = settings.AWS_S3_BUCKET_NAME
+        self.region = settings.AWS_REGION
 
         if not self.bucket_name:
             raise ValueError("AWS_S3_BUCKET_NAME environment variable is not set")
