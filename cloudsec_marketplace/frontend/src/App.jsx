@@ -1,28 +1,36 @@
 import { Routes, Route } from "react-router-dom";
-import Home from "./pages/Home";
-import Auth from "./pages/Auth";
-import Checkout from "./pages/Checkout";
 import Navbar from "./components/Navbar";
+import Home from "./pages/Home";
+import Login from "./pages/Login";
+import Signup from "./pages/Signup";
+import CreatorProfile from "./pages/CreatorProfile";
+import ArtRequest from "./pages/ArtRequest";
+import Dashboard from "./pages/Dashboard";
+import BecomeCreator from "./pages/BecomeCreator";
+import EditProfile from "./pages/EditProfile";
+import AuthProvider from "./context/AuthContext";
+import RequestProvider from "./context/RequestContext";
 
 import "./App.css";
-import AuthProvider from "./context/AuthContext";
-import ProductDetails from "./pages/ProductDetails";
-import CartProvider from "./context/CartContext";
 
 function App() {
   return (
     <AuthProvider>
-      <CartProvider>
+      <RequestProvider>
         <div className="app">
           <Navbar />
           <Routes>
             <Route path="/" element={<Home />} />
-            <Route path="/auth" element={<Auth />} />
-            <Route path="/checkout" element={<Checkout />} />
-            <Route path="/products/:id" element={<ProductDetails />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<Signup />} />
+            <Route path="/creator/:username" element={<CreatorProfile />} />
+            <Route path="/creator/:username/request" element={<ArtRequest />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/become-creator" element={<BecomeCreator />} />
+            <Route path="/profile/edit" element={<EditProfile />} />
           </Routes>
         </div>
-      </CartProvider>
+      </RequestProvider>
     </AuthProvider>
   );
 }
