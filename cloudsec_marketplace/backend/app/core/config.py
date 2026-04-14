@@ -11,6 +11,10 @@ class Settings(BaseSettings):
     AWS_REGION: str | None = None               # We have the AWS region, or not
     SECRET_KEY: str # the key to hash with
 
+    AWS_S3_BUCKET_NAME: str
+    AWS_ACCESS_KEY_ID: str
+    AWS_SECRET_ACCESS_KEY: str
+
     ALGORITHM: ClassVar[str] = "HS256" # Signing Algorithm we chose, HMAC + SHA-256
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 # How long our token is valid for
 

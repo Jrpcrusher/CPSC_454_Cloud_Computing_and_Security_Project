@@ -15,9 +15,18 @@ from .api.__init__ import (
 def create_app():
     app = FastAPI(title="Marketplace Backend API")
 
+    origins = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "https://jrpgfx.com",
+        "https://www.jrpgfx.com"
+    ]
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"], # TODO: Change this eventually to the actual website name, so "https://something.com"
+        allow_origins=origins, # TODO: Change this eventually to the actual website name, so "https://something.com"
         allow_credentials=True, # Allows cookies and such to be sent to send credentials
         allow_methods=["*"], # All methods are allowed, such GET, POST, PUT, DELETE, etc.
         allow_headers=["*"], # Allows for all HTTP header types
