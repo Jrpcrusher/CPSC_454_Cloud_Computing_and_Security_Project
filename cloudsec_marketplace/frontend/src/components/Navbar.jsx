@@ -1,54 +1,83 @@
-import { Link } from "react-router-dom";
+import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import Logo from "../assets/images/logo.png";
 
 export default function Navbar() {
-  const { user, logout } = useAuth();
+  const { user, isCreator, logout } = useAuth();
+  const navigate = useNavigate();
+
+  function handleLogout() {
+    logout();
+    navigate("/");
+  }
+
   return (
-    <div className="headerWrapper">
-      <div className="top-strip bg-blue">
-        <div className="container">
-          <p className="mb-0 mt-0 text-center">
-            Due to <b>Finals Week</b> coming up, we will not be able to ship
-            orders placed after April 30th. We apologize for the inconvenience.
-          </p>
+    <nav className="navbar">
+      <div className="navbar-container">
+        {/* Brand */}
+        <Link to="/" className="navbar-brand-link">
+          <img src={Logo} alt="Logo" className="logoImg" />
+        </Link>
+
+        {/* Center links */}
+        <div className="navbar-links">
+          <NavLink
+            to="/"
+            end
+            className={({ isActive }) =>
+              "navbar-link" + (isActive ? " navbar-link--active" : "")
+            }
+          >
+            Explore
+          </NavLink>
+          {user && (
+            <NavLink
+              to="/dashboard"
+              className={({ isActive }) =>
+                "navbar-link" + (isActive ? " navbar-link--active" : "")
+              }
+            >
+              Dashboard
+            </NavLink>
+          )}
+          {user && isCreator && (
+            <NavLink
+              to={`/creator/${user.creatorUsername}`}
+              className={({ isActive }) =>
+                "navbar-link" + (isActive ? " navbar-link--active" : "")
+              }
+            >
+              My Profile
+            </NavLink>
+          )}
+        </div>
+
+        {/* Right side */}
+        <div className="navbar-auth">
+          {!user ? (
+            <div className="navbar-auth-links">
+              <Link to="/login" className="btn btn-secondary btn-small">
+                Log In
+              </Link>
+              <Link to="/signup" className="btn btn-primary btn-small">
+                Sign Up
+              </Link>
+            </div>
+          ) : (
+            <div className="navbar-user">
+              {/* Username → clicks to dashboard */}
+              <Link to="/dashboard" className="navbar-username-btn" title={user.email}>
+                {user.email.split("@")[0]}
+              </Link>
+
+              {/* Logout */}
+              <button className="btn btn-primary btn-small" onClick={handleLogout}>
+                Log Out
+              </button>
+            </div>
+          )}
         </div>
       </div>
-
-      <nav className="navbar">
-        <div className="navbar-container">
-          <Link to="/">
-            <img src={Logo} alt="Logo" className="logoImg" />
-          </Link>
-          <div className="navbar-links">
-            <Link to="/" className="navbar-link">
-              Home
-            </Link>
-            <Link to="/checkout" className="navbar-link">
-              Cart
-            </Link>
-          </div>
-          <div className="navbar-auth">
-            {!user ? (
-              <div className="navbar-auth-links">
-                <Link to="/auth" className="btn btn-secondary">
-                  Login
-                </Link>
-                <Link to="/auth" className="btn btn-primary">
-                  Signup
-                </Link>
-              </div>
-            ) : (
-              <div className="navbar-user">
-                <span className="navbar-greeting">Hello, {user.email}</span>
-                <button className="btn btn-secondary" onClick={logout}>
-                  Logout
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      </nav>
-    </div>
+    </nav>
   );
 }
