@@ -6,9 +6,10 @@
  *  3. Renders at reduced CSS quality (blur + low resolution cap) so the
  *     preview isn't worth stealing even if someone screenshots it
  *
- * NOTE: No frontend protection is 100% foolproof — a determined person can
- * always take a screenshot. The goal is to make casual theft not worth it
- * and to make watermarked previews useless for reuse.
+ * Note: This is not intended to be a bulletproof anti-theft solution, just
+ * a speed bump to deter casual users from stealing images. A determined thief
+ * could still screenshot the image or inspect the network requests to get the
+ * original file, but this should stop most people from doing so on a whim.
  */
 
 function block(e) {

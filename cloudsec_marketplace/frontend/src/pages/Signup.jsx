@@ -4,11 +4,15 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 const PASSWORD_RULES = [
-  { id: "length",  label: "At least 8 characters",  test: (v) => v.length >= 8 },
-  { id: "upper",   label: "One uppercase letter",    test: (v) => /[A-Z]/.test(v) },
-  { id: "lower",   label: "One lowercase letter",    test: (v) => /[a-z]/.test(v) },
-  { id: "number",  label: "One number",              test: (v) => /[0-9]/.test(v) },
-  { id: "special", label: "One special character",   test: (v) => /[^A-Za-z0-9]/.test(v) },
+  { id: "length", label: "At least 8 characters", test: (v) => v.length >= 8 },
+  { id: "upper", label: "One uppercase letter", test: (v) => /[A-Z]/.test(v) },
+  { id: "lower", label: "One lowercase letter", test: (v) => /[a-z]/.test(v) },
+  { id: "number", label: "One number", test: (v) => /[0-9]/.test(v) },
+  {
+    id: "special",
+    label: "One special character",
+    test: (v) => /[^A-Za-z0-9]/.test(v),
+  },
 ];
 
 export default function Signup() {
@@ -44,7 +48,9 @@ export default function Signup() {
     const allPassed = PASSWORD_RULES.every((r) => r.test(data.password));
     if (!allPassed) {
       clearPasswords();
-      setServerError("Your password doesn't meet all the requirements. Please try again.");
+      setServerError(
+        "Your password doesn't meet all the requirements. Please try again.",
+      );
       return;
     }
 
@@ -71,12 +77,18 @@ export default function Signup() {
         <div className="auth-container auth-container--wide">
           <h1 className="page-title">Create Account</h1>
 
-          <form className="auth-form" onSubmit={handleSubmit(onSubmit)} noValidate>
+          <form
+            className="auth-form"
+            onSubmit={handleSubmit(onSubmit)}
+            noValidate
+          >
             {serverError && <div className="error-message">{serverError}</div>}
 
-            {/* ── Username ─────────────────────────────────────────── */}
+            {/* Username */}
             <div className="form-group">
-              <label className="form-label" htmlFor="displayName">Username</label>
+              <label className="form-label" htmlFor="displayName">
+                Username
+              </label>
               <input
                 id="displayName"
                 type="text"
@@ -93,9 +105,11 @@ export default function Signup() {
               )}
             </div>
 
-            {/* ── Email ────────────────────────────────────────────── */}
+            {/* Email */}
             <div className="form-group">
-              <label className="form-label" htmlFor="email">Email</label>
+              <label className="form-label" htmlFor="email">
+                Email
+              </label>
               <input
                 id="email"
                 type="email"
@@ -104,8 +118,9 @@ export default function Signup() {
                 {...register("email", {
                   required: "Email is required",
                   pattern: {
-                    value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
-                    message: "Enter a valid email address",
+                    value:
+                      /^[^\s@]+@(gmail\.com|yahoo\.com|outlook\.com|aol\.com|hotmail\.com|live\.com|icloud\.com)$/i,
+                    message: "Please enter a valid email address",
                   },
                 })}
               />
@@ -114,9 +129,11 @@ export default function Signup() {
               )}
             </div>
 
-            {/* ── Password ─────────────────────────────────────────── */}
+            {/* Password */}
             <div className="form-group">
-              <label className="form-label" htmlFor="password">Password</label>
+              <label className="form-label" htmlFor="password">
+                Password
+              </label>
               <input
                 id="password"
                 type="password"
@@ -143,7 +160,7 @@ export default function Signup() {
               )}
             </div>
 
-            {/* ── Confirm Password ─────────────────────────────────── */}
+            {/* Confirm Password */}
             <div className="form-group">
               <label className="form-label" htmlFor="confirmPassword">
                 Confirm Password
@@ -168,7 +185,9 @@ export default function Signup() {
           <div className="auth-switch">
             <p>
               Already have an account?{" "}
-              <Link to="/login" className="auth-link">Log In</Link>
+              <Link to="/login" className="auth-link">
+                Log In
+              </Link>
             </p>
           </div>
         </div>

@@ -5,23 +5,26 @@ import { useAuth } from "../context/AuthContext";
 
 const MAX_BIO = 200;
 
-// Compress + square-crop an image file via canvas, returns a base64 JPEG string
-function compressAvatar(file, maxPx = 240) {
+// Scale the entire image to fit inside a maxPx × maxPx square canvas (contain, no crop).
+function compressAvatar(file, maxPx = 300) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
       const img = new Image();
       img.onload = () => {
-        const size = Math.min(img.width, img.height, maxPx);
         const canvas = document.createElement("canvas");
-        canvas.width = size;
-        canvas.height = size;
+        canvas.width = maxPx;
+        canvas.height = maxPx;
         const ctx = canvas.getContext("2d");
-        // Centre-crop to square
-        const sx = (img.width - size) / 2;
-        const sy = (img.height - size) / 2;
-        ctx.drawImage(img, sx, sy, size, size, 0, 0, size, size);
-        resolve(canvas.toDataURL("image/jpeg", 0.75));
+        const scale = Math.min(maxPx / img.width, maxPx / img.height);
+        const scaledW = img.width * scale;
+        const scaledH = img.height * scale;
+        const dx = (maxPx - scaledW) / 2;
+        const dy = (maxPx - scaledH) / 2;
+        ctx.fillStyle = "#313338";
+        ctx.fillRect(0, 0, maxPx, maxPx);
+        ctx.drawImage(img, dx, dy, scaledW, scaledH);
+        resolve(canvas.toDataURL("image/jpeg", 0.85));
       };
       img.onerror = reject;
       img.src = e.target.result;
@@ -48,8 +51,7 @@ export default function EditProfile() {
   const fileInputRef = useRef(null);
 
   const [preview, setPreview] = useState(user?.avatarUrl || null);
-  const [newAvatarBase64, setNewAvatarBase64] = useState(undefined); // undefined = unchanged
-  const [bioLength, setBioLength] = useState((user?.bio || "").length);
+  const [newAvatarBase64, setNewAvatarBase64] = useState(undefined);
   const [uploadError, setUploadError] = useState(null);
   const [saved, setSaved] = useState(false);
 
@@ -86,7 +88,6 @@ export default function EditProfile() {
     setUploadError(null);
     const file = e.target.files[0];
     if (!file) return;
-
     if (!file.type.startsWith("image/")) {
       setUploadError("Please upload an image file (JPG, PNG, GIF, etc.)");
       return;
@@ -95,7 +96,6 @@ export default function EditProfile() {
       setUploadError("Image must be under 5 MB.");
       return;
     }
-
     try {
       const compressed = await compressAvatar(file);
       setPreview(compressed);
@@ -107,7 +107,7 @@ export default function EditProfile() {
 
   function removeAvatar() {
     setPreview(null);
-    setNewAvatarBase64(null); // null = explicitly removed
+    setNewAvatarBase64(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
@@ -115,14 +115,11 @@ export default function EditProfile() {
     const result = updateProfile({
       displayName: data.displayName.trim(),
       bio: data.bio.trim(),
-      avatarUrl: newAvatarBase64, // undefined = keep existing; null = remove; string = new
+      avatarUrl: newAvatarBase64,
     });
-
     if (result.success) {
       setSaved(true);
-      setTimeout(() => {
-        navigate("/dashboard");
-      }, 1200);
+      setTimeout(() => navigate("/dashboard"), 1200);
     }
   }
 
@@ -208,7 +205,6 @@ export default function EditProfile() {
             )}
 
             <form className="request-form" onSubmit={handleSubmit(onSubmit)} noValidate>
-
               {/* Display name */}
               <div className="form-group">
                 <label className="form-label" htmlFor="displayName">
@@ -244,7 +240,6 @@ export default function EditProfile() {
                   maxLength={MAX_BIO}
                   {...register("bio", {
                     maxLength: { value: MAX_BIO, message: `${MAX_BIO} characters max` },
-                    onChange: (e) => setBioLength(e.target.value.length),
                   })}
                 />
                 <div className="ep-bio-counter">

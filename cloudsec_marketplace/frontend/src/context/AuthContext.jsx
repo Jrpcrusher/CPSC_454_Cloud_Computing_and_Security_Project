@@ -33,10 +33,19 @@ export default function AuthProvider({ children }) {
     const record = loadUserRecord(email);
     return record
       ? buildUserState(record)
-      : { email, role: "user", creatorUsername: null, displayName: email.split("@")[0], bio: "", avatarUrl: null, createdAt: null, updatedAt: null };
+      : {
+          email,
+          role: "user",
+          creatorUsername: null,
+          displayName: email.split("@")[0],
+          bio: "",
+          avatarUrl: null,
+          createdAt: null,
+          updatedAt: null,
+        };
   });
 
-  // ── Sign up ──────────────────────────────────────────────────────────────
+  // Sign up
   function signUp(email, password, displayName) {
     const users = JSON.parse(localStorage.getItem("users") || "[]");
     if (users.find((u) => u.email === email)) {
@@ -61,10 +70,12 @@ export default function AuthProvider({ children }) {
     return { success: true };
   }
 
-  // ── Login ────────────────────────────────────────────────────────────────
+  // Login
   function login(email, password) {
     const users = JSON.parse(localStorage.getItem("users") || "[]");
-    const record = users.find((u) => u.email === email && u.password === password);
+    const record = users.find(
+      (u) => u.email === email && u.password === password,
+    );
     if (!record) {
       return { success: false, error: "Invalid email or password" };
     }
@@ -73,13 +84,13 @@ export default function AuthProvider({ children }) {
     return { success: true };
   }
 
-  // ── Logout ───────────────────────────────────────────────────────────────
+  // Logout
   function logout() {
     localStorage.removeItem("currentUserEmail");
     setUser(null);
   }
 
-  // ── Update User Profile ───────────────────────────────────────────────────
+  // Update User Profile
   function updateProfile({ displayName, bio, avatarUrl }) {
     const record = loadUserRecord(user.email);
     if (!record) return { success: false, error: "User not found" };
@@ -93,15 +104,36 @@ export default function AuthProvider({ children }) {
     };
     saveUserRecord(updated);
     setUser(buildUserState(updated));
+
+    // Sync avatar to creator profile if user is a creator and avatar changed
+    if (updated.creatorUsername && avatarUrl !== undefined) {
+      const userCreators = JSON.parse(
+        localStorage.getItem("userCreators") || "[]",
+      );
+      const next = userCreators.map((c) =>
+        c.username === updated.creatorUsername
+          ? {
+              ...c,
+              avatar:
+                avatarUrl ||
+                `https://ui-avatars.com/api/?name=${encodeURIComponent(updated.displayName)}&background=5865f2&color=fff&size=150`,
+            }
+          : c,
+      );
+      localStorage.setItem("userCreators", JSON.stringify(next));
+    }
+
     return { success: true };
   }
 
-  // ── Become a Creator ─────────────────────────────────────────────────────
+  // Become a Creator
   function becomeCreator(creatorProfile) {
     const record = loadUserRecord(user.email);
     if (!record) return { success: false, error: "User not found" };
 
-    const userCreators = JSON.parse(localStorage.getItem("userCreators") || "[]");
+    const userCreators = JSON.parse(
+      localStorage.getItem("userCreators") || "[]",
+    );
     if (userCreators.find((c) => c.username === creatorProfile.username)) {
       return { success: false, error: "Username already taken" };
     }
@@ -109,7 +141,8 @@ export default function AuthProvider({ children }) {
     const fullProfile = {
       ...creatorProfile,
       id: `user_${Date.now()}`,
-      avatar: record.avatarUrl ||
+      avatar:
+        record.avatarUrl ||
         `https://ui-avatars.com/api/?name=${encodeURIComponent(creatorProfile.displayName)}&background=5865f2&color=fff&size=150`,
       banner: `https://picsum.photos/seed/${creatorProfile.username}/1200/300`,
       portfolio: [],
@@ -118,18 +151,25 @@ export default function AuthProvider({ children }) {
     userCreators.push(fullProfile);
     localStorage.setItem("userCreators", JSON.stringify(userCreators));
 
-    const updated = { ...record, role: "creator", creatorUsername: creatorProfile.username };
+    const updated = {
+      ...record,
+      role: "creator",
+      creatorUsername: creatorProfile.username,
+    };
     saveUserRecord(updated);
     setUser(buildUserState(updated));
     return { success: true };
   }
 
-  // ── Update Creator Profile ────────────────────────────────────────────────
+  // Update Creator Profile
   function updateCreatorProfile(changes) {
-    if (!user?.creatorUsername) return { success: false, error: "Not a creator" };
-    const userCreators = JSON.parse(localStorage.getItem("userCreators") || "[]");
+    if (!user?.creatorUsername)
+      return { success: false, error: "Not a creator" };
+    const userCreators = JSON.parse(
+      localStorage.getItem("userCreators") || "[]",
+    );
     const next = userCreators.map((c) =>
-      c.username === user.creatorUsername ? { ...c, ...changes } : c
+      c.username === user.creatorUsername ? { ...c, ...changes } : c,
     );
     localStorage.setItem("userCreators", JSON.stringify(next));
     return { success: true };
@@ -139,7 +179,16 @@ export default function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, isCreator, signUp, login, logout, updateProfile, becomeCreator, updateCreatorProfile }}
+      value={{
+        user,
+        isCreator,
+        signUp,
+        login,
+        logout,
+        updateProfile,
+        becomeCreator,
+        updateCreatorProfile,
+      }}
     >
       {children}
     </AuthContext.Provider>

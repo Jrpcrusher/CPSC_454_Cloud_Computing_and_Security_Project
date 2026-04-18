@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useParams, useLocation, useNavigate, Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { getCreatorByUsername } from "../data/creators";
@@ -11,6 +12,13 @@ export default function ArtRequest() {
   const creator = getCreatorByUsername(username);
   const { user } = useAuth();
   const { submitRequest } = useRequests();
+
+  // Silently redirect if the user tries to request from their own profile
+  useEffect(() => {
+    if (user?.creatorUsername === username) {
+      navigate(`/creator/${username}`, { replace: true });
+    }
+  }, [user, username, navigate]);
 
   const defaultTier = location.state?.selectedTier || (creator?.tiers[0]?.name ?? "");
 
