@@ -1,3 +1,4 @@
+// Hardcoded demo creators (no backend account — for showcase only)
 export const creators = [
   {
     id: 1,
@@ -210,6 +211,30 @@ export const creators = [
     ],
   },
 ];
+
+// Map a backend PublicProfile to the creator card shape
+export function backendProfileToCreator(profile) {
+  const localCreators = JSON.parse(localStorage.getItem("userCreators") || "[]");
+  const localProfile = localCreators.find((c) => c.user_id === profile.user_id);
+
+  return {
+    id: profile.user_id,
+    user_id: profile.user_id,
+    username: profile.username,
+    displayName: profile.username,
+    avatar:
+      profile.pfp_url ||
+      `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.username)}&background=5865f2&color=fff&size=150`,
+    banner:
+      localProfile?.banner ||
+      `https://picsum.photos/seed/${profile.username}/1200/300`,
+    bio: profile.description || localProfile?.bio || "No bio yet.",
+    tags: localProfile?.tags || [],
+    stats: localProfile?.stats || { completedRequests: 0, rating: "New", responseTime: "TBD" },
+    tiers: localProfile?.tiers || [],
+    portfolio: localProfile?.portfolio || [],
+  };
+}
 
 // Returns user-created creator profiles stored in localStorage
 export function getUserCreators() {

@@ -108,6 +108,14 @@ def upload_order_image(order_id: str, image: UploadFile = File(...), current_use
 def download_image(order_id: str, current_user=Depends(get_current_user), db = Depends(get_db)):
     return db_service.download_image(order_id, current_user["user_id"], db)
 
+@router.patch("/me/become-creator")
+def become_creator(current_user=Depends(get_current_user), db=Depends(get_db)):
+    db["user"].update_one(
+        {"user_id": current_user["user_id"]},
+        {"$set": {"role": UserRole.creator}}
+    )
+    return {"role": UserRole.creator, "user_id": current_user["user_id"]}
+
 @router.post("/me/orders/{order_id}/approve", response_model=OrderApprovalResponse)
 def approve_order(order_id: str, current_user=Depends(get_current_user), db = Depends(get_db)):
     result = db_service.approve_order(order_id, current_user["user_id"], db)

@@ -64,14 +64,55 @@ Orders can exist with or without payment:
 
 ## Setup
 
-### 1. Install Dependencies
+### Prerequisites
+
+Before you start, make sure you have:
+
+- **Python 3.11+** (tested on 3.13)
+- **Node.js 18+** and npm (for the frontend)
+- A **MongoDB Atlas** account (free M0 tier is fine) or a local MongoDB instance
+- A **Stripe** account in test mode — https://dashboard.stripe.com/register
+- The **Stripe CLI** installed — https://stripe.com/docs/stripe-cli
+- An **AWS** account with an S3 bucket and an IAM user that has `s3:PutObject`, `s3:GetObject`, and `s3:DeleteObject` permissions on that bucket
+
+### 1. Clone and Install Backend Dependencies
 
 ```bash
+git clone <repo-url>
 cd cloudsec_marketplace/backend
 pip install -r requirements.txt
 ```
 
-### 2. Environment Variables
+### 2. Set Up MongoDB Atlas
+
+If you're using Atlas (recommended):
+
+1. Create a cluster at https://cloud.mongodb.com.
+2. **Allow your IP address.** Go to **Network Access** → **Add IP Address** → either "Add Current IP Address" (dev-safe for your current network) or `0.0.0.0/0` (open to anywhere — only for dev; never production). Wait ~1 minute for the rule to become `Active`.
+   - If your IP changes (home Wi-Fi, coffee shop, tethering), you'll need to re-add it. A `TLSV1_ALERT_INTERNAL_ERROR` or `ServerSelectionTimeoutError` on the first DB call is the classic symptom of an IP not being allowlisted.
+3. Create a database user under **Database Access** and give it read/write access.
+4. Click **Connect** → **Drivers** and copy the connection string. It looks like `mongodb+srv://<user>:<password>@<cluster>.mongodb.net/`.
+5. If the cluster is on the free M0 tier and has been idle, check that it's not **Paused** — resume it from the Database dashboard.
+
+If you're running MongoDB locally, the default `mongodb://localhost:27017` in `.env.example` already works.
+
+### 3. Enable Stripe Connect
+
+Stripe Connect is required for the artist onboarding and payout flow. It's off by default on new Stripe accounts:
+
+1. Go to https://dashboard.stripe.com/test/connect/overview and click **Get started**.
+2. Choose **Platform or marketplace** when prompted, and **Express** accounts for the artist type.
+3. Fill in the required platform profile fields. You only need to complete enough to enable test mode.
+
+Without this, `POST /payments/artist/onboard` will fail with a Stripe error.
+
+### 4. Set Up AWS S3
+
+1. Create an S3 bucket (any region — note it for `AWS_REGION`).
+2. Create an IAM user with programmatic access and attach a policy granting `s3:PutObject`, `s3:GetObject`, and `s3:DeleteObject` on `arn:aws:s3:::<your-bucket>/*`.
+3. Save the access key ID and secret access key — you'll put these in `.env`.
+
+### 5. Environment Variables
 
 Copy the example and fill in your values:
 
@@ -79,7 +120,23 @@ Copy the example and fill in your values:
 cp cloudsec_marketplace/backend/.env.example cloudsec_marketplace/backend/.env
 ```
 
-### 3. Run the Server
+Fill in `.env` with the values you collected above. Key variables:
+
+| Variable | Notes |
+|----------|-------|
+| `MONGODB_URI` | Your Atlas connection string, or `mongodb://localhost:27017` for local |
+| `DB_NAME` | The database name to use (e.g. `cloudsec_marketplace`) |
+| `STRIPE_SECRET_KEY` | From https://dashboard.stripe.com/test/apikeys (starts with `sk_test_`) |
+| `STRIPE_PUBLISHABLE_KEY` | Same page (starts with `pk_test_`) |
+| `STRIPE_WEBHOOK_SECRET` | Printed by `stripe listen` — see step 7 below |
+| `PLATFORM_FEE_PERCENT` | Platform cut per transaction (default 10) |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | IAM user credentials |
+| `AWS_REGION` | e.g. `us-east-1` |
+| `AWS_S3_BUCKET_NAME` | The bucket name only, no `s3://` prefix |
+| `SECRET_KEY` | JWT signing secret — generate with `python -c "import secrets; print(secrets.token_urlsafe(32))"` |
+| `FRONTEND_URL` | Where Stripe should redirect after onboarding. Set to `http://localhost:5173` to match the Vite dev server |
+
+### 6. Run the Backend
 
 ```bash
 cd cloudsec_marketplace/backend
@@ -88,16 +145,39 @@ uvicorn app.main:app --reload --port 8000
 
 API docs: [http://localhost:8000/docs](http://localhost:8000/docs)
 
-### 4. Stripe Webhook Testing
+The log line `Connected to MongoDB database <name>` on startup is misleading — PyMongo connects lazily, so DB errors (bad IP allowlist, wrong credentials, paused cluster) don't surface until the first query. If `GET /home/profiles` returns 500 with a TLS or `ServerSelectionTimeoutError`, revisit step 2.
 
-Install the [Stripe CLI](https://stripe.com/docs/stripe-cli), then:
+### 7. Stripe Webhook Listener
+
+In a separate terminal, forward Stripe events to your local backend:
 
 ```bash
 stripe login
 stripe listen --forward-to localhost:8000/payments/webhook
 ```
 
-This prints a `whsec_...` value. Add it as `STRIPE_WEBHOOK_SECRET` in your `.env`.
+Copy the `whsec_...` value it prints into `STRIPE_WEBHOOK_SECRET` in `.env`, then restart the backend. Leave `stripe listen` running while you test payment flows.
+
+### 8. Run the Frontend
+
+In another terminal:
+
+```bash
+cd cloudsec_marketplace/frontend
+npm install
+npm run dev
+```
+
+The frontend runs on **http://localhost:5173** (Vite's default). If Vite starts on a different port (e.g. because 5173 is taken), update `FRONTEND_URL` in the backend `.env` to match and restart the backend — otherwise Stripe Connect will redirect to the wrong port after onboarding and you'll see `ERR_CONNECTION_REFUSED`.
+
+### 9. Verify End-to-End
+
+A quick smoke test that exercises the full stack:
+
+1. Visit http://localhost:5173 — home page loads with creators
+2. Sign up, then log in
+3. From the dashboard, click "Become a Creator" and fill out the form
+4. Click "Set Up Payouts" — you should be redirected to Stripe's hosted onboarding, and after completing it, returned to `http://localhost:5173/artist/onboard/complete` with the banner flipping to "Payouts enabled"
 
 ## API Endpoints
 
@@ -209,6 +289,20 @@ Buyer creates order ──► received ──► Artist accepts ──► accept
                                                        completed
 ```
 
+## Troubleshooting
+
+**`ServerSelectionTimeoutError` / `TLSV1_ALERT_INTERNAL_ERROR` on first DB query**
+Your client IP isn't on the Atlas Network Access list, the cluster is paused, or (on Python 3.13) your `certifi` bundle is stale. Fix in that order: add your IP, resume the cluster, then `pip install --upgrade pymongo certifi`.
+
+**`ERR_CONNECTION_REFUSED` after Stripe Connect onboarding**
+Stripe redirected to a URL the frontend isn't serving. Confirm the frontend is running, note the port Vite printed, and set `FRONTEND_URL` in the backend `.env` to match that exact origin. Restart the backend.
+
+**Stripe onboarding returns an account-type error**
+Stripe Connect hasn't been enabled on your platform account yet. See setup step 3.
+
+**`NoCredentialsError` when uploading artwork**
+`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` are missing or wrong in `.env`. The backend only reads `.env` at startup, so restart after changing it.
+
 ## Running Tests
 
 Tests use [mongomock](https://github.com/mongomock/mongomock) for the database and mock all Stripe and S3 calls.
@@ -282,7 +376,7 @@ cloudsec_marketplace/
 │   └── seed/                           # Sample seed data
 ├── docs/
 │   └── architecture/                   # Architecture and security notes
-├── frontend/                           # Frontend application
+├── frontend/                           # Frontend application (Vite + React)
 └── infastructure/
     ├── aws/                            # IAM roles, S3 policies, SQS config
     └── docker-compose.yml

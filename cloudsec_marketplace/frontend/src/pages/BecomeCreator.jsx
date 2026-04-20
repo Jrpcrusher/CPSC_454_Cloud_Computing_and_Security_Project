@@ -92,7 +92,7 @@ export default function BecomeCreator() {
     setTiers((prev) => prev.map((t, i) => (i === index ? { ...t, [field]: value } : t)));
   }
 
-  function onSubmit(data) {
+  async function onSubmit(data) {
     setSubmitError(null);
 
     if (selectedTags.length === 0) {
@@ -100,7 +100,7 @@ export default function BecomeCreator() {
       return;
     }
 
-    // Check username uniqueness
+    // Check username uniqueness locally
     const allCreators = getAllCreators();
     if (allCreators.find((c) => c.username === data.username)) {
       setSubmitError("That username is already taken. Please choose another.");
@@ -125,7 +125,7 @@ export default function BecomeCreator() {
         .filter(Boolean),
     }));
 
-    const result = becomeCreator({
+    const result = await becomeCreator({
       username: data.username,
       displayName: data.displayName,
       bio: data.bio,

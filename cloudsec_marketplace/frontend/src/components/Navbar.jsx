@@ -6,8 +6,8 @@ export default function Navbar() {
   const { user, isCreator, logout } = useAuth();
   const navigate = useNavigate();
 
-  function handleLogout() {
-    logout();
+  async function handleLogout() {
+    await logout();
     navigate("/");
   }
 
@@ -65,12 +65,9 @@ export default function Navbar() {
             </div>
           ) : (
             <div className="navbar-user">
-              {/* Username → clicks to dashboard */}
               <Link to="/dashboard" className="navbar-username-btn" title={user.email}>
-                {user.email.split("@")[0]}
+                {user.username || user.displayName}
               </Link>
-
-              {/* Logout */}
               <button className="btn btn-primary btn-small" onClick={handleLogout}>
                 Log Out
               </button>

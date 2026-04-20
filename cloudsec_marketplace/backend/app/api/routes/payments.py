@@ -260,8 +260,8 @@ def onboard_artist(current_user=Depends(get_current_user), db=Depends(get_db)):
     try:
         account_link = stripe.AccountLink.create(
             account=stripe_account_id,
-            refresh_url=settings.STRIPE_ONBOARD_REFRESH_URL,
-            return_url=settings.STRIPE_ONBOARD_RETURN_URL,
+            refresh_url=f"{settings.FRONTEND_URL}/artist/onboard/refresh",
+            return_url=f"{settings.FRONTEND_URL}/artist/onboard/complete",
             type="account_onboarding",
         )
     except stripe.StripeError as e:
@@ -286,8 +286,8 @@ def refresh_onboard_link(current_user=Depends(get_current_user), db=Depends(get_
     try:
         account_link = stripe.AccountLink.create(
             account=stripe_account_id,
-            refresh_url=settings.STRIPE_ONBOARD_REFRESH_URL,
-            return_url=settings.STRIPE_ONBOARD_RETURN_URL,
+            refresh_url=f"{settings.FRONTEND_URL}/artist/onboard/refresh",
+            return_url=f"{settings.FRONTEND_URL}/artist/onboard/complete",
             type="account_onboarding",
         )
     except stripe.StripeError as e:

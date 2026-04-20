@@ -3,10 +3,10 @@ import { useForm } from "react-hook-form";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
-const MAX_BIO = 200;
+const MAX_BIO = 500; // backend allows 500 chars for description
 
-// Scale the entire image to fit inside a maxPx × maxPx square canvas (contain, no crop).
-function compressAvatar(file, maxPx = 300) {
+// Compress image to a canvas-scaled JPEG, return as Blob
+function compressAvatarToBlob(file, maxPx = 300) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -24,7 +24,11 @@ function compressAvatar(file, maxPx = 300) {
         ctx.fillStyle = "#313338";
         ctx.fillRect(0, 0, maxPx, maxPx);
         ctx.drawImage(img, dx, dy, scaledW, scaledH);
-        resolve(canvas.toDataURL("image/jpeg", 0.85));
+        canvas.toBlob(
+          (blob) => (blob ? resolve(blob) : reject(new Error("Canvas toBlob failed"))),
+          "image/jpeg",
+          0.85,
+        );
       };
       img.onerror = reject;
       img.src = e.target.result;
@@ -40,8 +44,6 @@ function formatDate(iso) {
     month: "long",
     day: "numeric",
     year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
   });
 }
 
@@ -51,9 +53,10 @@ export default function EditProfile() {
   const fileInputRef = useRef(null);
 
   const [preview, setPreview] = useState(user?.avatarUrl || null);
-  const [newAvatarBase64, setNewAvatarBase64] = useState(undefined);
+  const [avatarBlob, setAvatarBlob] = useState(undefined);
   const [uploadError, setUploadError] = useState(null);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState(null);
 
   const {
     register,
@@ -97,9 +100,9 @@ export default function EditProfile() {
       return;
     }
     try {
-      const compressed = await compressAvatar(file);
-      setPreview(compressed);
-      setNewAvatarBase64(compressed);
+      const blob = await compressAvatarToBlob(file);
+      setAvatarBlob(blob);
+      setPreview(URL.createObjectURL(blob));
     } catch {
       setUploadError("Could not process image. Please try another file.");
     }
@@ -107,19 +110,22 @@ export default function EditProfile() {
 
   function removeAvatar() {
     setPreview(null);
-    setNewAvatarBase64(null);
+    setAvatarBlob(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
-  function onSubmit(data) {
-    const result = updateProfile({
+  async function onSubmit(data) {
+    setSaveError(null);
+    const result = await updateProfile({
       displayName: data.displayName.trim(),
       bio: data.bio.trim(),
-      avatarUrl: newAvatarBase64,
+      avatarSource: avatarBlob,
     });
     if (result.success) {
       setSaved(true);
       setTimeout(() => navigate("/dashboard"), 1200);
+    } else {
+      setSaveError(result.error || "Failed to save profile.");
     }
   }
 
@@ -141,7 +147,7 @@ export default function EditProfile() {
                 ) : (
                   <div className="ep-avatar-placeholder">
                     <span className="ep-avatar-initials">
-                      {(user.displayName || user.email)[0].toUpperCase()}
+                      {(user.displayName || user.username || "?")[0].toUpperCase()}
                     </span>
                   </div>
                 )}
@@ -181,10 +187,6 @@ export default function EditProfile() {
                 <span className="ep-date-label">Member since</span>
                 <span className="ep-date-value">{formatDate(user.createdAt)}</span>
               </div>
-              <div className="ep-date-row">
-                <span className="ep-date-label">Last updated</span>
-                <span className="ep-date-value">{formatDate(user.updatedAt)}</span>
-              </div>
             </div>
           </aside>
 
@@ -203,22 +205,27 @@ export default function EditProfile() {
                 ✅ Profile saved! Redirecting to dashboard…
               </div>
             )}
+            {saveError && <div className="error-message">{saveError}</div>}
 
             <form className="request-form" onSubmit={handleSubmit(onSubmit)} noValidate>
-              {/* Display name */}
+              {/* Username / Display name */}
               <div className="form-group">
                 <label className="form-label" htmlFor="displayName">
-                  Display Name *
+                  Username *
                 </label>
                 <input
                   id="displayName"
                   type="text"
                   className="form-input"
-                  placeholder="How you want to appear to others"
+                  placeholder="Your username"
                   {...register("displayName", {
-                    required: "Display name is required",
-                    minLength: { value: 2, message: "At least 2 characters" },
-                    maxLength: { value: 40, message: "40 characters max" },
+                    required: "Username is required",
+                    minLength: { value: 3, message: "At least 3 characters" },
+                    maxLength: { value: 30, message: "30 characters max" },
+                    pattern: {
+                      value: /^[a-zA-Z0-9_]+$/,
+                      message: "Letters, numbers, and underscores only",
+                    },
                   })}
                 />
                 {errors.displayName && (
@@ -230,7 +237,7 @@ export default function EditProfile() {
               <div className="form-group">
                 <label className="form-label" htmlFor="bio">
                   Bio
-                  <span className="form-label-hint"> (optional — shown on your dashboard)</span>
+                  <span className="form-label-hint"> (optional — shown on your public profile)</span>
                 </label>
                 <textarea
                   id="bio"
@@ -255,7 +262,7 @@ export default function EditProfile() {
                 className="btn btn-primary btn-large"
                 disabled={isSubmitting || saved}
               >
-                {saved ? "Saved ✓" : "Save Changes"}
+                {saved ? "Saved ✓" : isSubmitting ? "Saving…" : "Save Changes"}
               </button>
             </form>
           </div>

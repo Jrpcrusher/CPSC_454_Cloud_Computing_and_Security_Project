@@ -11,8 +11,7 @@ class Settings(BaseSettings):
     STRIPE_PUBLISHABLE_KEY: str | None = _config.get("STRIPE_PUBLISHABLE_KEY")   # Stripe publishable key exposed to frontend
     STRIPE_WEBHOOK_SECRET: str | None = _config.get("STRIPE_WEBHOOK_SECRET")    # Secret for verifying Stripe webhook signatures
     PLATFORM_FEE_PERCENT: float = 0.10         # Platform commission percentage (e.g. 10%)
-    STRIPE_ONBOARD_REFRESH_URL: str = "http://localhost:3000/artist/onboard/refresh"
-    STRIPE_ONBOARD_RETURN_URL: str = "http://localhost:3000/artist/onboard/complete"
+    FRONTEND_URL: str = "http://localhost:5173"
     
     AWS_REGION: str = "us-east-1"
     AWS_S3_BUCKET_NAME: str = _config.get("AWS_S3_BUCKET_NAME", "")

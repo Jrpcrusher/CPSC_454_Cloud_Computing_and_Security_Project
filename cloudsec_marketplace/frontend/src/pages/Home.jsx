@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { getAllCreators } from "../data/creators";
+import { getAllCreators, backendProfileToCreator } from "../data/creators";
 import CreatorCard from "../components/CreatorCard";
+import api from "../services/apiClient";
 
 const ALL_TAGS = [
   "All",
@@ -18,14 +19,37 @@ const ALL_TAGS = [
 export default function Home() {
   const [activeTag, setActiveTag] = useState("All");
   const [search, setSearch] = useState("");
+  const [backendCreators, setBackendCreators] = useState([]);
 
-  const filtered = getAllCreators().filter((c) => {
-    const matchesTag = activeTag === "All" || c.tags.includes(activeTag);
+  // Fetch real users from the backend and merge them into the creator list
+  useEffect(() => {
+    api
+      .get("/home/profiles")
+      .then((profiles) => {
+        if (Array.isArray(profiles)) {
+          setBackendCreators(profiles.map(backendProfileToCreator));
+        }
+      })
+      .catch(() => {
+        // Backend unreachable — fall back to mock-only data silently
+      });
+  }, []);
+
+  // Merge: mock creators first, then backend users (avoid username collisions)
+  const mockCreators = getAllCreators();
+  const mockUsernames = new Set(mockCreators.map((c) => c.username));
+  const mergedCreators = [
+    ...mockCreators,
+    ...backendCreators.filter((c) => !mockUsernames.has(c.username)),
+  ];
+
+  const filtered = mergedCreators.filter((c) => {
+    const matchesTag = activeTag === "All" || (c.tags || []).includes(activeTag);
     const matchesSearch =
       search === "" ||
       c.displayName.toLowerCase().includes(search.toLowerCase()) ||
-      c.tags.some((t) => t.toLowerCase().includes(search.toLowerCase())) ||
-      c.bio.toLowerCase().includes(search.toLowerCase());
+      (c.tags || []).some((t) => t.toLowerCase().includes(search.toLowerCase())) ||
+      (c.bio || "").toLowerCase().includes(search.toLowerCase());
     return matchesTag && matchesSearch;
   });
 

@@ -5,6 +5,7 @@ import { useAuth } from "../context/AuthContext";
 
 export default function Login() {
   const [error, setError] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
   const navigate = useNavigate();
   const { login } = useAuth();
 
@@ -14,9 +15,11 @@ export default function Login() {
     formState: { errors },
   } = useForm();
 
-  function onSubmit(data) {
+  async function onSubmit(data) {
     setError(null);
-    const result = login(data.email, data.password);
+    setSubmitting(true);
+    const result = await login(data.username, data.password);
+    setSubmitting(false);
     if (result.success) {
       navigate("/");
     } else {
@@ -33,15 +36,15 @@ export default function Login() {
             {error && <div className="error-message">{error}</div>}
 
             <div className="form-group">
-              <label className="form-label" htmlFor="email">Email</label>
+              <label className="form-label" htmlFor="username">Username</label>
               <input
-                id="email"
-                type="email"
+                id="username"
+                type="text"
                 className="form-input"
-                placeholder="you@example.com"
-                {...register("email", { required: "Email is required" })}
+                placeholder="your_username"
+                {...register("username", { required: "Username is required" })}
               />
-              {errors.email && <span className="form-error">{errors.email.message}</span>}
+              {errors.username && <span className="form-error">{errors.username.message}</span>}
             </div>
 
             <div className="form-group">
@@ -56,8 +59,8 @@ export default function Login() {
               {errors.password && <span className="form-error">{errors.password.message}</span>}
             </div>
 
-            <button type="submit" className="btn btn-primary btn-large">
-              Log In
+            <button type="submit" className="btn btn-primary btn-large" disabled={submitting}>
+              {submitting ? "Logging in…" : "Log In"}
             </button>
           </form>
 

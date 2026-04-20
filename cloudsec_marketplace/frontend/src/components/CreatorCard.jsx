@@ -1,8 +1,9 @@
 import { Link } from "react-router-dom";
 
 export default function CreatorCard({ creator }) {
-  const { username, displayName, avatar, bio, tags, tiers, stats } = creator;
-  const startingPrice = Math.min(...tiers.map((t) => t.price));
+  const { username, displayName, avatar, bio, tags = [], tiers = [], stats = {} } = creator;
+  const hasTiers = tiers.length > 0;
+  const startingPrice = hasTiers ? Math.min(...tiers.map((t) => t.price)) : null;
 
   return (
     <div className="creator-card">
@@ -23,31 +24,37 @@ export default function CreatorCard({ creator }) {
 
       <p className="creator-card-bio">{bio}</p>
 
-      <div className="creator-card-tags">
-        {tags.map((tag) => (
-          <span key={tag} className="tag">
-            {tag}
-          </span>
-        ))}
-      </div>
+      {tags.length > 0 && (
+        <div className="creator-card-tags">
+          {tags.map((tag) => (
+            <span key={tag} className="tag">
+              {tag}
+            </span>
+          ))}
+        </div>
+      )}
 
       <div className="creator-card-stats">
         <div className="creator-stat">
-          <span className="creator-stat-value">⭐ {stats.rating}</span>
+          <span className="creator-stat-value">⭐ {stats.rating ?? "New"}</span>
           <span className="creator-stat-label">Rating</span>
         </div>
         <div className="creator-stat">
-          <span className="creator-stat-value">{stats.completedRequests}</span>
+          <span className="creator-stat-value">{stats.completedRequests ?? 0}</span>
           <span className="creator-stat-label">Completed</span>
         </div>
         <div className="creator-stat">
-          <span className="creator-stat-value">{stats.responseTime}</span>
+          <span className="creator-stat-value">{stats.responseTime ?? "TBD"}</span>
           <span className="creator-stat-label">Avg. Response</span>
         </div>
       </div>
 
       <div className="creator-card-footer">
-        <span className="creator-card-price">From ${startingPrice}</span>
+        {hasTiers ? (
+          <span className="creator-card-price">From ${startingPrice}</span>
+        ) : (
+          <span className="creator-card-price">Contact for pricing</span>
+        )}
         <Link to={`/creator/${username}`} className="btn btn-primary btn-small">
           View Profile →
         </Link>

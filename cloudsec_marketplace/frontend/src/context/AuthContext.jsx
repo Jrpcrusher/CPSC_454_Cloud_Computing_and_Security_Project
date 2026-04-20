@@ -1,148 +1,157 @@
-import { createContext, useState, useContext } from "react";
+import { createContext, useState, useContext, useEffect } from "react";
+import api from "../services/apiClient";
 
 const AuthContext = createContext(null);
 
-function loadUserRecord(email) {
-  const users = JSON.parse(localStorage.getItem("users") || "[]");
-  return users.find((u) => u.email === email) || null;
-}
-
-function saveUserRecord(updated) {
-  const users = JSON.parse(localStorage.getItem("users") || "[]");
-  const next = users.map((u) => (u.email === updated.email ? updated : u));
-  localStorage.setItem("users", JSON.stringify(next));
-}
-
-function buildUserState(record) {
+function mapBackendUser(data) {
   return {
-    email: record.email,
-    role: record.role || "user",
-    creatorUsername: record.creatorUsername || null,
-    displayName: record.displayName || record.email.split("@")[0],
-    bio: record.bio || "",
-    avatarUrl: record.avatarUrl || null,
-    createdAt: record.createdAt || null,
-    updatedAt: record.updatedAt || null,
+    user_id: data.user_id,
+    username: data.username,
+    displayName: data.username,
+    email: data.email,
+    role: data.role,
+    bio: data.description || "",
+    avatarUrl: data.pfp_url || null,
+    createdAt: data.register_date || null,
+    updatedAt: null,
+    creatorUsername: null,
   };
 }
 
+function getLocalCreatorData(userId) {
+  try {
+    const raw = localStorage.getItem(`creatorProfile_${userId}`);
+    if (!raw) return {};
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
+
+function base64ToBlob(base64Str) {
+  const [header, data] = base64Str.split(",");
+  const mimeType = header.match(/:(.*?);/)[1];
+  const bytes = atob(data);
+  const buf = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i++) buf[i] = bytes.charCodeAt(i);
+  return new Blob([buf], { type: mimeType });
+}
+
 export default function AuthProvider({ children }) {
-  const [user, setUser] = useState(() => {
-    const email = localStorage.getItem("currentUserEmail");
-    if (!email) return null;
-    const record = loadUserRecord(email);
-    return record
-      ? buildUserState(record)
-      : {
-          email,
-          role: "user",
-          creatorUsername: null,
-          displayName: email.split("@")[0],
-          bio: "",
-          avatarUrl: null,
-          createdAt: null,
-          updatedAt: null,
-        };
-  });
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  // Sign up
-  function signUp(email, password, displayName) {
-    const users = JSON.parse(localStorage.getItem("users") || "[]");
-    if (users.find((u) => u.email === email)) {
-      return { success: false, error: "Email already exists" };
+  useEffect(() => {
+    const token = api.getToken();
+    if (!token) {
+      setLoading(false);
+      return;
     }
-    const now = new Date().toISOString();
-    const newRecord = {
-      email,
-      password,
-      role: "user",
-      creatorUsername: null,
-      displayName: displayName || email.split("@")[0],
-      bio: "",
-      avatarUrl: null,
-      createdAt: now,
-      updatedAt: now,
-    };
-    users.push(newRecord);
-    localStorage.setItem("users", JSON.stringify(users));
-    localStorage.setItem("currentUserEmail", email);
-    setUser(buildUserState(newRecord));
-    return { success: true };
+    api
+      .get("/user/me")
+      .then((data) => {
+        const base = mapBackendUser(data);
+        const local = getLocalCreatorData(data.user_id);
+        setUser({ ...base, ...local });
+      })
+      .catch(() => {
+        api.clearToken();
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function signUp(username, email, password) {
+    try {
+      await api.post("/auth/register", { username, email, password });
+      return await login(username, password);
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
   }
 
-  // Login
-  function login(email, password) {
-    const users = JSON.parse(localStorage.getItem("users") || "[]");
-    const record = users.find(
-      (u) => u.email === email && u.password === password,
-    );
-    if (!record) {
-      return { success: false, error: "Invalid email or password" };
+  async function login(username, password) {
+    try {
+      const tokenData = await api.postForm("/auth/login", { username, password });
+      api.setToken(tokenData.access_token);
+      const me = await api.get("/user/me");
+      const base = mapBackendUser(me);
+      const local = getLocalCreatorData(me.user_id);
+      setUser({ ...base, ...local });
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err.message };
     }
-    localStorage.setItem("currentUserEmail", email);
-    setUser(buildUserState(record));
-    return { success: true };
   }
 
-  // Logout
-  function logout() {
-    localStorage.removeItem("currentUserEmail");
+  async function logout() {
+    try {
+      await api.post("/auth/logout");
+    } catch {
+      // ignore — clear client-side regardless
+    }
+    api.clearToken();
     setUser(null);
   }
 
-  // Update User Profile
-  function updateProfile({ displayName, bio, avatarUrl }) {
-    const record = loadUserRecord(user.email);
-    if (!record) return { success: false, error: "User not found" };
+  // avatarSource can be a File, Blob, or base64 string
+  async function updateProfile({ displayName, bio, avatarSource } = {}) {
+    try {
+      const settingsUpdate = {};
+      if (displayName !== undefined) settingsUpdate.username = displayName;
+      if (bio !== undefined) settingsUpdate.description = bio;
 
-    const updated = {
-      ...record,
-      displayName: displayName || record.displayName,
-      bio: bio ?? record.bio,
-      avatarUrl: avatarUrl !== undefined ? avatarUrl : record.avatarUrl,
-      updatedAt: new Date().toISOString(),
-    };
-    saveUserRecord(updated);
-    setUser(buildUserState(updated));
+      if (Object.keys(settingsUpdate).length > 0) {
+        await api.patch("/user/me/settings", settingsUpdate);
+      }
 
-    // Sync avatar to creator profile if user is a creator and avatar changed
-    if (updated.creatorUsername && avatarUrl !== undefined) {
-      const userCreators = JSON.parse(
-        localStorage.getItem("userCreators") || "[]",
-      );
-      const next = userCreators.map((c) =>
-        c.username === updated.creatorUsername
-          ? {
-              ...c,
-              avatar:
-                avatarUrl ||
-                `https://ui-avatars.com/api/?name=${encodeURIComponent(updated.displayName)}&background=5865f2&color=fff&size=150`,
-            }
-          : c,
-      );
-      localStorage.setItem("userCreators", JSON.stringify(next));
+      if (avatarSource !== undefined && avatarSource !== null) {
+        let blob =
+          avatarSource instanceof Blob
+            ? avatarSource
+            : typeof avatarSource === "string" && avatarSource.startsWith("data:")
+            ? base64ToBlob(avatarSource)
+            : null;
+
+        if (blob) {
+          const fd = new FormData();
+          fd.append("image", blob, "avatar.jpg");
+          await api.post("/user/me/settings/pfp", fd);
+        }
+      } else if (avatarSource === null) {
+        // Removal not supported by the backend; silently skip
+      }
+
+      const me = await api.get("/user/me");
+      const base = mapBackendUser(me);
+      const local = getLocalCreatorData(me.user_id);
+      setUser((prev) => ({ ...prev, ...base, ...local }));
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err.message };
     }
-
-    return { success: true };
   }
 
-  // Become a Creator
-  function becomeCreator(creatorProfile) {
-    const record = loadUserRecord(user.email);
-    if (!record) return { success: false, error: "User not found" };
+  async function becomeCreator(creatorProfile) {
+    if (!user) return { success: false, error: "Not logged in" };
 
-    const userCreators = JSON.parse(
-      localStorage.getItem("userCreators") || "[]",
-    );
+    const userCreators = JSON.parse(localStorage.getItem("userCreators") || "[]");
     if (userCreators.find((c) => c.username === creatorProfile.username)) {
       return { success: false, error: "Username already taken" };
     }
 
+    // Persist creator role to backend
+    try {
+      await api.patch("/user/me/become-creator");
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+
     const fullProfile = {
       ...creatorProfile,
-      id: `user_${Date.now()}`,
+      id: user.user_id,
+      user_id: user.user_id,
       avatar:
-        record.avatarUrl ||
+        user.avatarUrl ||
         `https://ui-avatars.com/api/?name=${encodeURIComponent(creatorProfile.displayName)}&background=5865f2&color=fff&size=150`,
       banner: `https://picsum.photos/seed/${creatorProfile.username}/1200/300`,
       portfolio: [],
@@ -151,23 +160,15 @@ export default function AuthProvider({ children }) {
     userCreators.push(fullProfile);
     localStorage.setItem("userCreators", JSON.stringify(userCreators));
 
-    const updated = {
-      ...record,
-      role: "creator",
-      creatorUsername: creatorProfile.username,
-    };
-    saveUserRecord(updated);
-    setUser(buildUserState(updated));
+    const localData = { role: "creator", creatorUsername: creatorProfile.username };
+    localStorage.setItem(`creatorProfile_${user.user_id}`, JSON.stringify(localData));
+    setUser((prev) => ({ ...prev, ...localData }));
     return { success: true };
   }
 
-  // Update Creator Profile
   function updateCreatorProfile(changes) {
-    if (!user?.creatorUsername)
-      return { success: false, error: "Not a creator" };
-    const userCreators = JSON.parse(
-      localStorage.getItem("userCreators") || "[]",
-    );
+    if (!user?.creatorUsername) return { success: false, error: "Not a creator" };
+    const userCreators = JSON.parse(localStorage.getItem("userCreators") || "[]");
     const next = userCreators.map((c) =>
       c.username === user.creatorUsername ? { ...c, ...changes } : c,
     );
@@ -182,6 +183,7 @@ export default function AuthProvider({ children }) {
       value={{
         user,
         isCreator,
+        loading,
         signUp,
         login,
         logout,

@@ -8,6 +8,8 @@ import ArtRequest from "./pages/ArtRequest";
 import Dashboard from "./pages/Dashboard";
 import BecomeCreator from "./pages/BecomeCreator";
 import EditProfile from "./pages/EditProfile";
+import OnboardComplete from "./pages/OnboardComplete";
+import OnboardRefresh from "./pages/OnboardRefresh";
 import AuthProvider from "./context/AuthContext";
 import RequestProvider from "./context/RequestContext";
 
@@ -28,6 +30,8 @@ function App() {
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/become-creator" element={<BecomeCreator />} />
             <Route path="/profile/edit" element={<EditProfile />} />
+            <Route path="/artist/onboard/complete" element={<OnboardComplete />} />
+            <Route path="/artist/onboard/refresh" element={<OnboardRefresh />} />
           </Routes>
         </div>
       </RequestProvider>

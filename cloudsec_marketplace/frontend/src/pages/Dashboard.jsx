@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useRequests } from "../context/RequestContext";
 import RequestCard from "../components/RequestCard";
+import api from "../services/apiClient";
 
 function formatDate(iso) {
   if (!iso) return "N/A";
@@ -13,15 +14,104 @@ function formatDate(iso) {
   });
 }
 
+function StripeOnboardingBanner({ userId }) {
+  const [status, setStatus] = useState(null); // null | "complete" | "incomplete" | "not_started"
+  const [onboarding, setOnboarding] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    api
+      .get("/payments/artist/onboard/status")
+      .then((data) => setStatus(data.status))
+      .catch(() => setStatus("not_started"));
+  }, [userId]);
+
+  async function handleOnboard() {
+    setOnboarding(true);
+    setError(null);
+    try {
+      const data = await api.post("/payments/artist/onboard");
+      if (data.onboarding_url) {
+        window.location.href = data.onboarding_url;
+      } else {
+        setError("No onboarding URL returned. Please try again.");
+        setOnboarding(false);
+      }
+    } catch (err) {
+      setError(err.message || "Failed to start onboarding. Please try again.");
+      setOnboarding(false);
+    }
+  }
+
+  if (status === null) return null;
+
+  if (status === "complete") {
+    return (
+      <div
+        className="become-creator-cta"
+        style={{ background: "rgba(59,165,92,0.1)", borderColor: "rgba(59,165,92,0.3)" }}
+      >
+        <div className="bc-cta-text">
+          <span className="bc-cta-icon">✅</span>
+          <div>
+            <strong>Payouts enabled</strong>
+            <p>Your Stripe account is connected. You'll receive payouts when clients approve completed work.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="become-creator-cta"
+      style={{ background: "rgba(240,165,0,0.08)", borderColor: "rgba(240,165,0,0.3)" }}
+    >
+      <div className="bc-cta-text">
+        <span className="bc-cta-icon">💳</span>
+        <div>
+          <strong>Set up payouts to get paid</strong>
+          <p>Connect a Stripe account so you can receive funds when clients approve your work.</p>
+          {error && <p style={{ color: "#ed4245", marginTop: "0.25rem", fontSize: "0.85rem" }}>{error}</p>}
+        </div>
+      </div>
+      <button
+        className="btn btn-primary btn-small"
+        onClick={handleOnboard}
+        disabled={onboarding}
+      >
+        {onboarding ? "Redirecting…" : "Set Up Payouts →"}
+      </button>
+    </div>
+  );
+}
+
 export default function Dashboard() {
-  const { user, isCreator } = useAuth();
-  const { getRequestsByUser, getRequestsByCreator, updateRequestStatus } = useRequests();
+  const { user, isCreator, loading: authLoading } = useAuth();
+  const { getRequestsByUser, getRequestsByCreator, updateRequestStatus, loading: ordersLoading, refreshOrders } =
+    useRequests();
+
+  useEffect(() => {
+    if (user) refreshOrders();
+  }, [user?.user_id]);
 
   const tabs = [
     { id: "sent", label: "My Requests" },
     ...(isCreator ? [{ id: "received", label: "Received Requests" }] : []),
   ];
   const [activeTab, setActiveTab] = useState("sent");
+
+  if (authLoading) {
+    return (
+      <div className="page">
+        <div className="container">
+          <div className="empty-state">
+            <p>Loading…</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!user) {
     return (
@@ -39,7 +129,7 @@ export default function Dashboard() {
     );
   }
 
-  const sentRequests = getRequestsByUser(user.email);
+  const sentRequests = getRequestsByUser();
   const receivedRequests = isCreator ? getRequestsByCreator(user.creatorUsername) : [];
 
   return (
@@ -49,35 +139,29 @@ export default function Dashboard() {
         {/* ── Profile card ────────────────────────────────────────── */}
         <div className="dashboard-profile-card">
           <div className="dpc-left">
-            {/* Avatar */}
             <div className="dpc-avatar-wrap">
               {user.avatarUrl ? (
                 <img src={user.avatarUrl} alt={user.displayName} className="dpc-avatar" />
               ) : (
                 <div className="dpc-avatar-placeholder">
-                  {(user.displayName || user.email)[0].toUpperCase()}
+                  {(user.displayName || user.username || "?")[0].toUpperCase()}
                 </div>
               )}
             </div>
 
-            {/* Info */}
             <div className="dpc-info">
               <div className="dpc-name-row">
-                <h2 className="dpc-name">{user.displayName || user.email.split("@")[0]}</h2>
+                <h2 className="dpc-name">{user.displayName || user.username}</h2>
                 {isCreator && <span className="creator-role-badge">🎨 Creator</span>}
               </div>
               <p className="dpc-email">{user.email}</p>
               {user.bio && <p className="dpc-bio">{user.bio}</p>}
               <div className="dpc-dates">
                 <span>Member since {formatDate(user.createdAt)}</span>
-                {user.updatedAt && user.updatedAt !== user.createdAt && (
-                  <span>· Updated {formatDate(user.updatedAt)}</span>
-                )}
               </div>
             </div>
           </div>
 
-          {/* Actions */}
           <div className="dpc-actions">
             <Link to="/profile/edit" className="btn btn-secondary btn-small">
               ✏️ Edit Profile
@@ -89,6 +173,9 @@ export default function Dashboard() {
             )}
           </div>
         </div>
+
+        {/* ── Stripe Connect onboarding (creators only) ────────────── */}
+        {isCreator && <StripeOnboardingBanner userId={user.user_id} />}
 
         {/* ── Become a Creator CTA (non-creators only) ────────────── */}
         {!isCreator && (
@@ -158,7 +245,9 @@ export default function Dashboard() {
         {/* ── My Requests ─────────────────────────────────────────── */}
         {activeTab === "sent" && (
           <div className="dashboard-content">
-            {sentRequests.length === 0 ? (
+            {ordersLoading ? (
+              <div className="empty-state"><p>Loading orders…</p></div>
+            ) : sentRequests.length === 0 ? (
               <div className="empty-state">
                 <p>You haven't submitted any requests yet.</p>
                 <Link to="/" className="btn btn-primary" style={{ marginTop: "1rem" }}>
@@ -178,7 +267,9 @@ export default function Dashboard() {
         {/* ── Received Requests (creators only) ───────────────────── */}
         {activeTab === "received" && isCreator && (
           <div className="dashboard-content">
-            {receivedRequests.length === 0 ? (
+            {ordersLoading ? (
+              <div className="empty-state"><p>Loading orders…</p></div>
+            ) : receivedRequests.length === 0 ? (
               <div className="empty-state">
                 <p>No requests yet. Share your profile to start getting commissions!</p>
                 <Link

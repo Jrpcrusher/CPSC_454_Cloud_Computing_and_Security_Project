@@ -5,6 +5,7 @@ from enum import Enum
 
 class UserRole(str, Enum):
     user = "user"
+    creator = "creator"
     admin = "admin"
 
 class CreateUser(BaseModel): # For user creation

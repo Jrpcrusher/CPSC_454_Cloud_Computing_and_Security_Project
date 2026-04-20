@@ -102,6 +102,24 @@ export default function CreatorProfile() {
   const [portfolio, setPortfolio] = useState(creator?.portfolio || []);
   const [uploadError, setUploadError] = useState(null);
 
+  // ── Accepting commissions toggle ───────────────────────────────────────────
+  const commissionKey = creator.user_id ? `acceptingCommissions_${creator.user_id}` : null;
+  const [acceptingCommissions, setAcceptingCommissions] = useState(() => {
+    if (!commissionKey) return true;
+    return localStorage.getItem(commissionKey) !== "false";
+  });
+
+  function toggleAcceptingCommissions() {
+    const next = !acceptingCommissions;
+    setAcceptingCommissions(next);
+    if (commissionKey) localStorage.setItem(commissionKey, String(next));
+  }
+
+  // For visitors: read the stored value directly
+  const creatorIsAccepting = commissionKey
+    ? localStorage.getItem(commissionKey) !== "false"
+    : true;
+
   // ── Edit mode state ────────────────────────────────────────────────────
   const [isEditing, setIsEditing] = useState(false);
   const [editBio, setEditBio] = useState(creator?.bio || "");
@@ -377,14 +395,23 @@ export default function CreatorProfile() {
             </div>
           </div>
 
-          {/* Edit / Save / Cancel buttons — own profile only */}
+          {/* Edit / Save / Cancel buttons + commissions toggle — own profile only */}
           {isOwnProfile && !isEditing && (
-            <button
-              className="btn btn-secondary btn-small cp-edit-btn"
-              onClick={() => setIsEditing(true)}
-            >
-              ✏️ Edit Creator Profile
-            </button>
+            <div className="cp-edit-actions">
+              <button
+                className="btn btn-secondary btn-small cp-edit-btn"
+                onClick={() => setIsEditing(true)}
+              >
+                ✏️ Edit Creator Profile
+              </button>
+              <button
+                className={`btn btn-small ${acceptingCommissions ? "btn-primary" : "btn-secondary"}`}
+                onClick={toggleAcceptingCommissions}
+                title="Toggle whether you're currently accepting commission requests"
+              >
+                {acceptingCommissions ? "✅ Accepting Commissions" : "⏸ Commissions Closed"}
+              </button>
+            </div>
           )}
           {isOwnProfile && isEditing && (
             <div className="cp-edit-actions">
@@ -590,7 +617,7 @@ export default function CreatorProfile() {
                         </li>
                       ))}
                     </ul>
-                    {!isOwnProfile && (
+                    {!isOwnProfile && creatorIsAccepting && (
                       <button
                         className={`btn btn-block ${i === 1 ? "btn-primary" : "btn-secondary"}`}
                         onClick={() => handleRequestClick(tier)}
@@ -601,7 +628,15 @@ export default function CreatorProfile() {
                   </div>
                 ))}
 
-                {!user && !isOwnProfile && (
+                {!isOwnProfile && !creatorIsAccepting && (
+                  <div className="empty-state" style={{ marginTop: "1rem", padding: "1rem" }}>
+                    <p style={{ color: "#888", fontSize: "0.9rem" }}>
+                      ⏸ This creator is not currently accepting commissions.
+                    </p>
+                  </div>
+                )}
+
+                {!user && !isOwnProfile && creatorIsAccepting && (
                   <p className="profile-login-note">
                     <Link to="/login" className="auth-link">Log in</Link> or{" "}
                     <Link to="/signup" className="auth-link">sign up</Link> to submit a request.
