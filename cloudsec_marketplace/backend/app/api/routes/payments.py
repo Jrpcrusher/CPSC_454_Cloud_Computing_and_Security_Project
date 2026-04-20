@@ -260,8 +260,8 @@ def onboard_artist(current_user=Depends(get_current_user), db=Depends(get_db)):
     try:
         account_link = stripe.AccountLink.create(
             account=stripe_account_id,
-            refresh_url=settings.STRIPE_ONBOARD_REFRESH_URL,
-            return_url=settings.STRIPE_ONBOARD_RETURN_URL,
+            refresh_url=f"{settings.FRONTEND_URL}/artist/onboard/refresh",
+            return_url=f"{settings.FRONTEND_URL}/artist/onboard/complete",
             type="account_onboarding",
         )
     except stripe.StripeError as e:
@@ -286,8 +286,8 @@ def refresh_onboard_link(current_user=Depends(get_current_user), db=Depends(get_
     try:
         account_link = stripe.AccountLink.create(
             account=stripe_account_id,
-            refresh_url=settings.STRIPE_ONBOARD_REFRESH_URL,
-            return_url=settings.STRIPE_ONBOARD_RETURN_URL,
+            refresh_url=f"{settings.FRONTEND_URL}/artist/onboard/refresh",
+            return_url=f"{settings.FRONTEND_URL}/artist/onboard/complete",
             type="account_onboarding",
         )
     except stripe.StripeError as e:
@@ -330,11 +330,15 @@ def check_artist_onboard_status(current_user=Depends(get_current_user), db=Depen
 def get_my_transactions(current_user=Depends(get_current_user), db=Depends(get_db)):
     """
     View all transactions where the current user is buyer or artist.
-
-    NOTE: Requires auth to identify the user.
     """
-    # TODO: Use get_current_user to get user_id
-    raise HTTPException(
-        status_code=501,
-        detail="Requires auth implementation to identify the user."
-    )
+    user_id = str(current_user["user_id"])
+    raw = db["transaction"].find(
+        {"$or": [{"buyer_id": user_id}, {"artist_id": user_id}]}
+    ).sort("created_at", -1)
+
+    results = []
+    for txn in raw:
+        txn.pop("_id", None)
+        results.append(txn)
+
+    return results

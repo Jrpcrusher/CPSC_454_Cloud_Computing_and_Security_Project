@@ -397,8 +397,8 @@ def create_artist_connect_account(artist_id: str, email: str, db) -> dict:
         account_link = client.account_links.create(
             params={
                 "account": account.id,
-                "refresh_url": "http://localhost:3000/artist/onboard/refresh",  # TODO: use real domain
-                "return_url": "http://localhost:3000/artist/onboard/complete",  # TODO: use real domain
+                "refresh_url": f"{settings.FRONTEND_URL}/artist/onboard/refresh",
+                "return_url": f"{settings.FRONTEND_URL}/artist/onboard/complete",
                 "type": "account_onboarding",
             }
         )
