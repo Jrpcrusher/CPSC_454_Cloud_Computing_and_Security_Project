@@ -1,8 +1,9 @@
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { useState, useRef } from "react";
-import { getCreatorByUsername } from "../data/creators";
+import { useState, useRef, useEffect } from "react";
+import { getCreatorByUsername, backendProfileToCreator } from "../data/creators";
 import { useAuth } from "../context/AuthContext";
 import ProtectedImage from "../components/ProtectedImage";
+import api from "../services/apiClient";
 
 const AVAILABLE_TAGS = [
   "Anime", "Character Design", "Fantasy", "Digital",
@@ -94,8 +95,31 @@ export default function CreatorProfile() {
   const { user, updateProfile, updateCreatorProfile } = useAuth();
   const navigate = useNavigate();
 
-  const creator = getCreatorByUsername(username);
+  const localCreator = getCreatorByUsername(username);
+  const [creator, setCreator] = useState(localCreator);
+  const [creatorLoading, setCreatorLoading] = useState(!localCreator);
   const isOwnProfile = user?.creatorUsername === username;
+
+  useEffect(() => {
+    if (creator) return;
+    let cancelled = false;
+    api
+      .get("/home/profiles")
+      .then((profiles) => {
+        if (cancelled) return;
+        const match = profiles.find(
+          (p) => (p.creator_username || p.username) === username
+        );
+        setCreator(match ? backendProfileToCreator(match) : null);
+        setCreatorLoading(false);
+      })
+      .catch(() => {
+        if (!cancelled) setCreatorLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [username]);
 
   // ── Portfolio state ────────────────────────────────────────────────────
   const portfolioFileRef = useRef(null);
@@ -103,7 +127,7 @@ export default function CreatorProfile() {
   const [uploadError, setUploadError] = useState(null);
 
   // ── Accepting commissions toggle ───────────────────────────────────────────
-  const commissionKey = creator.user_id ? `acceptingCommissions_${creator.user_id}` : null;
+  const commissionKey = creator?.user_id ? `acceptingCommissions_${creator.user_id}` : null;
   const [acceptingCommissions, setAcceptingCommissions] = useState(() => {
     if (!commissionKey) return true;
     return localStorage.getItem(commissionKey) !== "false";
@@ -145,6 +169,16 @@ export default function CreatorProfile() {
   const [bannerError, setBannerError] = useState(null);
 
   const [editSaved, setEditSaved] = useState(false);
+
+  if (creatorLoading) {
+    return (
+      <div className="page">
+        <div className="container">
+          <p style={{ padding: "2rem", color: "#888" }}>Loading…</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!creator) {
     return (
@@ -628,6 +662,29 @@ export default function CreatorProfile() {
                   </div>
                 ))}
 
+                {/* Backend-only creator: no tiers yet — show generic request entry point */}
+                {!isOwnProfile && creatorIsAccepting && tiers.length === 0 && (
+                  <div className="empty-state" style={{ padding: "1rem" }}>
+                    <p style={{ color: "#888", fontSize: "0.9rem" }}>
+                      This creator hasn't set up commission tiers yet.
+                    </p>
+                    {user ? (
+                      <button
+                        className="btn btn-primary"
+                        style={{ marginTop: "0.75rem" }}
+                        onClick={() => navigate(`/creator/${username}/request`)}
+                      >
+                        Request a Commission
+                      </button>
+                    ) : (
+                      <p className="profile-login-note" style={{ marginTop: "0.5rem" }}>
+                        <Link to="/login" className="auth-link">Log in</Link> or{" "}
+                        <Link to="/signup" className="auth-link">sign up</Link> to submit a request.
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 {!isOwnProfile && !creatorIsAccepting && (
                   <div className="empty-state" style={{ marginTop: "1rem", padding: "1rem" }}>
                     <p style={{ color: "#888", fontSize: "0.9rem" }}>
@@ -636,7 +693,7 @@ export default function CreatorProfile() {
                   </div>
                 )}
 
-                {!user && !isOwnProfile && creatorIsAccepting && (
+                {!user && !isOwnProfile && creatorIsAccepting && tiers.length > 0 && (
                   <p className="profile-login-note">
                     <Link to="/login" className="auth-link">Log in</Link> or{" "}
                     <Link to="/signup" className="auth-link">sign up</Link> to submit a request.

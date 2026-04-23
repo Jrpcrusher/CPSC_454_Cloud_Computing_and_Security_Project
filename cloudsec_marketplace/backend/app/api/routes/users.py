@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from ...services import db_service
 from app.api.deps import *
 from ...models.user import *
@@ -109,12 +109,17 @@ def download_image(order_id: str, current_user=Depends(get_current_user), db = D
     return db_service.download_image(order_id, current_user["user_id"], db)
 
 @router.patch("/me/become-creator")
-def become_creator(current_user=Depends(get_current_user), db=Depends(get_db)):
+def become_creator(req: BecomeCreatorRequest, current_user=Depends(get_current_user), db=Depends(get_db)):
+    conflict = db["user"].find_one(
+        {"creator_username": req.creator_username, "user_id": {"$ne": current_user["user_id"]}}
+    )
+    if conflict:
+        raise HTTPException(status_code=409, detail="That creator username is already taken.")
     db["user"].update_one(
         {"user_id": current_user["user_id"]},
-        {"$set": {"role": UserRole.creator}}
+        {"$set": {"role": UserRole.creator, "creator_username": req.creator_username}}
     )
-    return {"role": UserRole.creator, "user_id": current_user["user_id"]}
+    return {"role": UserRole.creator, "user_id": current_user["user_id"], "creator_username": req.creator_username}
 
 @router.post("/me/orders/{order_id}/approve", response_model=OrderApprovalResponse)
 def approve_order(order_id: str, current_user=Depends(get_current_user), db = Depends(get_db)):

@@ -40,7 +40,7 @@ export default function Navbar() {
               Dashboard
             </NavLink>
           )}
-          {user && isCreator && (
+          {user && isCreator && user.creatorUsername && (
             <NavLink
               to={`/creator/${user.creatorUsername}`}
               className={({ isActive }) =>

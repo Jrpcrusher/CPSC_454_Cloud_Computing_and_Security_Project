@@ -20,7 +20,7 @@ s3_service = S3Service()
 
 # user issues
 def get_users(db):
-    users = list(db["user"].find({}, {"_id": 0, "passwordHash": 0}))
+    users = list(db["user"].find({"role": "creator"}, {"_id": 0, "passwordHash": 0}))
     return [attach_pfp_url(user) for user in users]
 
 def get_user(user_id, db):
@@ -424,29 +424,30 @@ def accept_order(order_id, user_id, db):
 
 def decline_order(order_id, user_id, db):
     user = db["user"].find_one({"user_id": user_id})
-    if not user: # Make sure user exists
+    if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
     order = db["order"].find_one({"order_id": order_id})
-    if not order: # Make sure order exists
+    if not order:
         raise HTTPException(status_code=404, detail="Order not found")
 
-    if order["artist"]["user_id"] != user_id: # Make sure the person is the artist
+    is_artist = order["artist"]["user_id"] == user_id
+    is_client = order["client"]["user_id"] == user_id
+    if not is_artist and not is_client:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    # Decline the order first — this should always succeed
+    if order["status"] in ("completed", "declined"):
+        raise HTTPException(status_code=400, detail="Cannot cancel a completed or already-declined order.")
+
     result = db["order"].update_one(
-        {
-            "order_id": order_id,
-            "artist.user_id": user_id
-        },
+        {"order_id": order_id},
         {"$set": {"status": "declined"}}
     )
 
     if result.matched_count == 0:
         raise HTTPException(status_code=400, detail="Order not found or cannot be declined")
 
-    # If there's an active transaction with held funds, refund the buyer
+    # If there's an active transaction, cancel or refund it
     active_txn = db["transaction"].find_one({
         "order_id": order_id,
         "status": {"$in": ["pending", "funds_held", "released"]},
@@ -456,8 +457,6 @@ def decline_order(order_id, user_id, db):
             from app.services.payment_service import refund_order
             refund_order(order_id, db)
         except Exception as e:
-            # CRITICAL: Order is declined but refund failed — needs manual intervention.
-            # Log the error but don't undo the decline; the artist's decision stands.
             import logging
             logging.getLogger(__name__).critical(
                 f"REFUND FAILED on decline: order_id={order_id}, "

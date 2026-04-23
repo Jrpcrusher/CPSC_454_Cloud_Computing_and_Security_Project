@@ -1,5 +1,6 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import api from "../services/apiClient";
+import { useRequests } from "../context/RequestContext";
 
 const STATUS_CONFIG = {
   pending: { label: "Pending", color: "#f0a500", bg: "rgba(240,165,0,0.1)" },
@@ -20,14 +21,44 @@ export default function RequestCard({ request, onStatusChange, isCreatorView = f
     deadline,
     status,
     createdAt,
+    artist_approval,
+    client_approval,
   } = request;
+
+  const { cancelRequest, refreshOrders } = useRequests();
 
   const fileInputRef = useRef(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState(null);
   const [uploadDone, setUploadDone] = useState(false);
+  const [completing, setCompleting] = useState(false);
+  const [approving, setApproving] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState(null);
+  const [canceling, setCanceling] = useState(false);
+  const [cancelError, setCancelError] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null);
+  const [transactionId, setTransactionId] = useState(null);
+
+  useEffect(() => {
+    if (isCreatorView || status !== "in_progress") return;
+    let cancelled = false;
+    api.get(`/user/me/orders/${id}`).then((data) => {
+      if (cancelled) return;
+      if (data.watermarked_url) setPreviewUrl(data.watermarked_url);
+      if (data.transaction_id) setTransactionId(data.transaction_id);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [id, isCreatorView, status]);
+
+  async function handlePreviewError() {
+    try {
+      const data = await api.get(`/user/me/orders/${id}`);
+      setPreviewUrl(data.watermarked_url || null);
+    } catch {
+      setPreviewUrl(null);
+    }
+  }
 
   const statusCfg = STATUS_CONFIG[status] || STATUS_CONFIG.pending;
   const date = new Date(createdAt).toLocaleDateString("en-US", {
@@ -136,7 +167,7 @@ export default function RequestCard({ request, onStatusChange, isCreatorView = f
       )}
 
       {/* Creator: upload final artwork + mark completed */}
-      {isCreatorView && onStatusChange && status === "in_progress" && (
+      {isCreatorView && onStatusChange && status === "in_progress" && !artist_approval && (
         <div className="request-card-actions" style={{ flexDirection: "column", alignItems: "flex-start", gap: "0.5rem" }}>
           <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
             <input
@@ -161,13 +192,86 @@ export default function RequestCard({ request, onStatusChange, isCreatorView = f
             <button
               className="btn btn-small"
               style={{ background: "#3ba55c", color: "#fff" }}
-              onClick={() => onStatusChange(id, "completed")}
+              onClick={async () => {
+                setCompleting(true);
+                await onStatusChange(id, "completed");
+                setCompleting(false);
+              }}
+              disabled={completing}
             >
-              Mark Completed
+              {completing ? "Submitting…" : "Mark Completed"}
             </button>
           </div>
           {uploadError && (
             <p style={{ fontSize: "0.8rem", color: "#ed4245", margin: 0 }}>{uploadError}</p>
+          )}
+        </div>
+      )}
+
+      {/* Client: watermarked preview during in_progress */}
+      {!isCreatorView && status === "in_progress" && previewUrl && (
+        <div style={{ margin: "0.75rem 0" }}>
+          <p style={{ fontSize: "0.8rem", color: "#888", marginBottom: "0.4rem" }}>
+            Watermarked preview — full resolution delivered on approval.
+          </p>
+          <img
+            src={previewUrl}
+            alt="Watermarked preview"
+            onError={handlePreviewError}
+            style={{ maxWidth: "100%", borderRadius: "8px", border: "1px solid #333" }}
+          />
+        </div>
+      )}
+
+      {/* Client: approve completed work (artist has marked done, client's turn) */}
+      {!isCreatorView && onStatusChange && status === "in_progress" && artist_approval === true && !client_approval && (
+        <div className="request-card-actions">
+          <button
+            className="btn btn-small"
+            style={{ background: "#3ba55c", color: "#fff" }}
+            onClick={async () => {
+              setApproving(true);
+              await onStatusChange(id, "completed");
+              setApproving(false);
+            }}
+            disabled={approving}
+          >
+            {approving ? "Approving…" : "Approve & Release"}
+          </button>
+        </div>
+      )}
+
+      {/* Client: cancel request (pending) or cancel & refund (in_progress) */}
+      {!isCreatorView && (status === "pending" || status === "in_progress") && (
+        <div className="request-card-actions" style={{ flexDirection: "column", alignItems: "flex-start", gap: "0.5rem" }}>
+          <button
+            className="btn btn-small"
+            style={{ background: "#ed4245", color: "#fff" }}
+            disabled={canceling}
+            onClick={async () => {
+              const hasEscrow = status === "in_progress" && !!transactionId;
+              const confirmMsg = hasEscrow
+                ? "Cancel this order and refund your payment? You will not receive the artwork."
+                : "Cancel this request?";
+              if (!window.confirm(confirmMsg)) return;
+              setCanceling(true);
+              setCancelError(null);
+              const result = await cancelRequest(id);
+              if (!result.success) {
+                setCancelError(result.error);
+                await refreshOrders();
+              }
+              setCanceling(false);
+            }}
+          >
+            {canceling
+              ? "Canceling…"
+              : status === "in_progress" && !!transactionId
+              ? "Cancel & Refund"
+              : "Cancel Request"}
+          </button>
+          {cancelError && (
+            <p style={{ fontSize: "0.8rem", color: "#ed4245", margin: 0 }}>{cancelError}</p>
           )}
         </div>
       )}

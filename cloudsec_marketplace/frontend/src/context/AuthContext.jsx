@@ -1,4 +1,4 @@
-import { createContext, useState, useContext, useEffect } from "react";
+import { createContext, useState, useContext, useEffect, useRef } from "react";
 import api from "../services/apiClient";
 
 const AuthContext = createContext(null);
@@ -14,7 +14,7 @@ function mapBackendUser(data) {
     avatarUrl: data.pfp_url || null,
     createdAt: data.register_date || null,
     updatedAt: null,
-    creatorUsername: null,
+    creatorUsername: data.creator_username || null,
   };
 }
 
@@ -40,6 +40,7 @@ function base64ToBlob(base64Str) {
 export default function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const hasAttemptedBackfillRef = useRef(false);
 
   useEffect(() => {
     const token = api.getToken();
@@ -52,7 +53,24 @@ export default function AuthProvider({ children }) {
       .then((data) => {
         const base = mapBackendUser(data);
         const local = getLocalCreatorData(data.user_id);
-        setUser({ ...base, ...local });
+        const merged = { ...base, ...local };
+        setUser(merged);
+
+        // One-time backfill: if backend has role=creator but no creator_username,
+        // and localStorage has one, silently push it to the backend.
+        if (
+          !hasAttemptedBackfillRef.current &&
+          data.role === "creator" &&
+          !data.creator_username &&
+          merged.creatorUsername
+        ) {
+          hasAttemptedBackfillRef.current = true;
+          api
+            .patch("/user/me/become-creator", { creator_username: merged.creatorUsername })
+            .catch((err) => {
+              console.warn("Creator username backfill failed:", err.message);
+            });
+        }
       })
       .catch(() => {
         api.clearToken();
@@ -139,9 +157,9 @@ export default function AuthProvider({ children }) {
       return { success: false, error: "Username already taken" };
     }
 
-    // Persist creator role to backend
+    // Persist creator role + username to backend
     try {
-      await api.patch("/user/me/become-creator");
+      await api.patch("/user/me/become-creator", { creator_username: creatorProfile.username });
     } catch (err) {
       return { success: false, error: err.message };
     }

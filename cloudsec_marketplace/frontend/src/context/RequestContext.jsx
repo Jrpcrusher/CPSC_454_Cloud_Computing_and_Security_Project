@@ -40,6 +40,8 @@ function parseOrder(order) {
     characterCount: details.characterCount || "1",
     status: STATUS_MAP[order.status] || order.status,
     createdAt: order.creation_date,
+    artist_approval: order.artist_approval || false,
+    client_approval: order.client_approval || false,
   };
 }
 
@@ -109,34 +111,36 @@ export default function RequestProvider({ children }) {
   }
 
   function getRequestsByUser() {
-    // Backend orders as client + localStorage fallback for mock creators
-    const localRequests = JSON.parse(localStorage.getItem("artRequests") || "[]");
-    return [...clientOrders, ...localRequests];
+    return [...clientOrders];
   }
 
   function getRequestsByCreator(username) {
-    // Backend orders as artist + localStorage fallback
-    const localRequests = JSON.parse(localStorage.getItem("artRequests") || "[]").filter(
-      (r) => r.creatorUsername === username,
-    );
-    return [...artistOrders, ...localRequests];
+    return artistOrders.filter((r) => r.creatorUsername === username);
+  }
+
+  async function cancelRequest(orderId) {
+    try {
+      await api.patch(`/user/me/orders/${orderId}/decline`);
+      setClientOrders((prev) =>
+        prev.map((r) => (r.id === orderId ? { ...r, status: "declined" } : r))
+      );
+      return { success: true };
+    } catch (err) {
+      const is404 = err.message?.includes("404") || err.status === 404;
+      if (is404) {
+        setClientOrders((prev) => prev.filter((r) => r.id !== orderId));
+        return { success: false, error: "Order no longer exists." };
+      }
+      return { success: false, error: err.message || "Failed to cancel. Please try again." };
+    }
   }
 
   async function updateRequestStatus(orderId, newStatus) {
     const suffix = ACTION_MAP[newStatus];
-
-    // Check if this is a local (mock creator) request
-    const localRequests = JSON.parse(localStorage.getItem("artRequests") || "[]");
-    const isLocal = localRequests.find((r) => r.id === orderId);
-    if (isLocal) {
-      const updated = localRequests.map((r) => (r.id === orderId ? { ...r, status: newStatus } : r));
-      localStorage.setItem("artRequests", JSON.stringify(updated));
-      return;
-    }
-
     if (!suffix) return;
     try {
-      await api.patch(`/user/me/orders/${orderId}/${suffix}`);
+      const method = suffix === "approve" ? "post" : "patch";
+      await api[method](`/user/me/orders/${orderId}/${suffix}`);
       setArtistOrders((prev) =>
         prev.map((r) => (r.id === orderId ? { ...r, status: newStatus } : r)),
       );
@@ -163,6 +167,7 @@ export default function RequestProvider({ children }) {
         getRequestsByUser,
         getRequestsByCreator,
         updateRequestStatus,
+        cancelRequest,
       }}
     >
       {children}

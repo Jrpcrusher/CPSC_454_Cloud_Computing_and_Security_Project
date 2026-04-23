@@ -13,9 +13,13 @@ class CreateUser(BaseModel): # For user creation
     email: EmailStr
     password: str = Field(min_length=12, max_length=128)
 
+class BecomeCreatorRequest(BaseModel):
+    creator_username: str = Field(min_length=3, max_length=30, pattern="^[a-zA-Z0-9_]+$")
+
 class PublicProfile(BaseModel): # Return a users public profile
     user_id: UUID
     username: str = Field(min_length=3, max_length=30)
+    creator_username: str | None = None
     register_date: datetime
     role: UserRole
     pfp_key: str | None = None
@@ -25,6 +29,7 @@ class PublicProfile(BaseModel): # Return a users public profile
 class ViewMe(BaseModel): # For viewing own profile
     user_id: UUID
     username: str = Field(min_length=3, max_length=30)
+    creator_username: str | None = None
     email: EmailStr
     register_date: datetime
     role: UserRole

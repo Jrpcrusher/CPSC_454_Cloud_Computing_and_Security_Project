@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useLocation, useNavigate, Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
-import { getCreatorByUsername } from "../data/creators";
+import { getCreatorByUsername, backendProfileToCreator } from "../data/creators";
 import { useAuth } from "../context/AuthContext";
 import { useRequests } from "../context/RequestContext";
 import api from "../services/apiClient";
@@ -122,7 +122,11 @@ export default function ArtRequest() {
   const { username } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const creator = getCreatorByUsername(username);
+
+  const localCreator = getCreatorByUsername(username);
+  const [creator, setCreator] = useState(localCreator);
+  const [creatorLoading, setCreatorLoading] = useState(!localCreator);
+
   const { user } = useAuth();
   const { submitRequest } = useRequests();
 
@@ -131,6 +135,27 @@ export default function ArtRequest() {
   const [paymentStep, setPaymentStep] = useState(false);
   const [pendingOrderId, setPendingOrderId] = useState(null);
   const [pendingAmountCents, setPendingAmountCents] = useState(0);
+
+  useEffect(() => {
+    if (creator) return;
+    let cancelled = false;
+    api
+      .get("/home/profiles")
+      .then((profiles) => {
+        if (cancelled) return;
+        const match = profiles.find(
+          (p) => (p.creator_username || p.username) === username
+        );
+        setCreator(match ? backendProfileToCreator(match) : null);
+        setCreatorLoading(false);
+      })
+      .catch(() => {
+        if (!cancelled) setCreatorLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [username]);
 
   useEffect(() => {
     if (user?.creatorUsername === username) {
@@ -148,6 +173,14 @@ export default function ArtRequest() {
   } = useForm({ defaultValues: { tier: defaultTier } });
 
   const selectedTierName = watch("tier");
+
+  if (creatorLoading) {
+    return (
+      <div className="page"><div className="container">
+        <p style={{ padding: "2rem", color: "#888" }}>Loading…</p>
+      </div></div>
+    );
+  }
 
   if (!creator) {
     return (

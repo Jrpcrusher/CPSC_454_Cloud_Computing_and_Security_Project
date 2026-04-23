@@ -6,7 +6,7 @@ export default function OnboardRefresh() {
 
   useEffect(() => {
     api
-      .post("/payments/artist/onboard")
+      .post("/payments/artist/onboard/refresh")
       .then((data) => {
         if (data.onboarding_url) {
           window.location.href = data.onboarding_url;

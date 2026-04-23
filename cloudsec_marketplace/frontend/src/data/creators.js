@@ -220,8 +220,8 @@ export function backendProfileToCreator(profile) {
   return {
     id: profile.user_id,
     user_id: profile.user_id,
-    username: profile.username,
-    displayName: profile.username,
+    username: profile.creator_username || profile.username,
+    displayName: profile.creator_username || profile.username,
     avatar:
       profile.pfp_url ||
       `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.username)}&background=5865f2&color=fff&size=150`,

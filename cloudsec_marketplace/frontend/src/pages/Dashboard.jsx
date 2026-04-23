@@ -257,7 +257,7 @@ export default function Dashboard() {
             ) : (
               <div className="requests-list">
                 {[...sentRequests].reverse().map((req) => (
-                  <RequestCard key={req.id} request={req} isCreatorView={false} />
+                  <RequestCard key={req.id} request={req} isCreatorView={false} onStatusChange={updateRequestStatus} />
                 ))}
               </div>
             )}
