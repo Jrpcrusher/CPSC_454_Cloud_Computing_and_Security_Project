@@ -10,31 +10,30 @@ import BecomeCreator from "./pages/BecomeCreator";
 import EditProfile from "./pages/EditProfile";
 import OnboardComplete from "./pages/OnboardComplete";
 import OnboardRefresh from "./pages/OnboardRefresh";
+import OrderDetail from "./pages/OrderDetail";
 import AuthProvider from "./context/AuthContext";
-import RequestProvider from "./context/RequestContext";
 
 import "./App.css";
 
 function App() {
   return (
     <AuthProvider>
-      <RequestProvider>
-        <div className="app">
-          <Navbar />
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/signup" element={<Signup />} />
-            <Route path="/creator/:username" element={<CreatorProfile />} />
-            <Route path="/creator/:username/request" element={<ArtRequest />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/become-creator" element={<BecomeCreator />} />
-            <Route path="/profile/edit" element={<EditProfile />} />
-            <Route path="/artist/onboard/complete" element={<OnboardComplete />} />
-            <Route path="/artist/onboard/refresh" element={<OnboardRefresh />} />
-          </Routes>
-        </div>
-      </RequestProvider>
+      <div className="app">
+        <Navbar />
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<Signup />} />
+          <Route path="/creator/:userId" element={<CreatorProfile />} />
+          <Route path="/creator/:userId/request" element={<ArtRequest />} />
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/become-creator" element={<BecomeCreator />} />
+          <Route path="/profile/edit" element={<EditProfile />} />
+          <Route path="/orders/:orderId" element={<OrderDetail />} />
+          <Route path="/artist/onboard/complete" element={<OnboardComplete />} />
+          <Route path="/artist/onboard/refresh" element={<OnboardRefresh />} />
+        </Routes>
+      </div>
     </AuthProvider>
   );
 }

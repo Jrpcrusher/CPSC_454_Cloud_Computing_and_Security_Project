@@ -5,9 +5,15 @@ from ...services import db_service
 from fastapi.security import OAuth2PasswordRequestForm
 router = APIRouter()
 
-############################################
-# Authentication routes possible
-############################################
+"""
+Endpoints:
+
+POST    /auth/register
+POST    /auth/login
+
+POST    /auth/logout
+ 
+"""
 
 # Register New Account
 @router.post("/register") # Create new account

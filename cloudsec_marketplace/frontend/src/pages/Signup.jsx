@@ -16,8 +16,7 @@ const PASSWORD_RULES = [
 ];
 
 export default function Signup() {
-  const [serverError, setServerError] = useState(null);
-  const [submitting, setSubmitting] = useState(false);
+  const [serverError, setServerError] = useState("");
   const navigate = useNavigate();
   const { signUp } = useAuth();
 
@@ -26,8 +25,11 @@ export default function Signup() {
     handleSubmit,
     watch,
     setValue,
-    formState: { errors },
-  } = useForm({ mode: "onSubmit", reValidateMode: "onSubmit" });
+    formState: { errors, isSubmitting },
+  } = useForm({
+    mode: "onSubmit",
+    reValidateMode: "onSubmit",
+  });
 
   const passwordValue = watch("password", "");
 
@@ -42,12 +44,12 @@ export default function Signup() {
   }
 
   async function onSubmit(data) {
-    setServerError(null);
+    setServerError("");
 
-    const allPassed = PASSWORD_RULES.every((r) => r.test(data.password));
+    const allPassed = PASSWORD_RULES.every((rule) => rule.test(data.password));
     if (!allPassed) {
       clearPasswords();
-      setServerError("Your password doesn't meet all the requirements. Please try again.");
+      setServerError("Your password does not meet all requirements. Please try again.");
       return;
     }
 
@@ -57,15 +59,17 @@ export default function Signup() {
       return;
     }
 
-    setSubmitting(true);
-    const result = await signUp(data.username.trim(), data.email, data.password);
-    setSubmitting(false);
+    const result = await signUp(
+      data.username.trim(),
+      data.email.trim(),
+      data.password
+    );
 
     if (result.success) {
       navigate("/");
     } else {
       clearPasswords();
-      setServerError(result.error);
+      setServerError(result.error || "Failed to create account.");
     }
   }
 
@@ -75,14 +79,9 @@ export default function Signup() {
         <div className="auth-container auth-container--wide">
           <h1 className="page-title">Create Account</h1>
 
-          <form
-            className="auth-form"
-            onSubmit={handleSubmit(onSubmit)}
-            noValidate
-          >
+          <form className="auth-form" onSubmit={handleSubmit(onSubmit)} noValidate>
             {serverError && <div className="error-message">{serverError}</div>}
 
-            {/* Username */}
             <div className="form-group">
               <label className="form-label" htmlFor="username">
                 Username
@@ -94,8 +93,14 @@ export default function Signup() {
                 placeholder="letters, numbers, underscores only"
                 {...register("username", {
                   required: "Username is required",
-                  minLength: { value: 3, message: "At least 3 characters" },
-                  maxLength: { value: 30, message: "30 characters max" },
+                  minLength: {
+                    value: 3,
+                    message: "At least 3 characters",
+                  },
+                  maxLength: {
+                    value: 30,
+                    message: "30 characters max",
+                  },
                   pattern: {
                     value: /^[a-zA-Z0-9_]+$/,
                     message: "Letters, numbers, and underscores only",
@@ -107,7 +112,6 @@ export default function Signup() {
               )}
             </div>
 
-            {/* Email */}
             <div className="form-group">
               <label className="form-label" htmlFor="email">
                 Email
@@ -130,7 +134,6 @@ export default function Signup() {
               )}
             </div>
 
-            {/* Password */}
             <div className="form-group">
               <label className="form-label" htmlFor="password">
                 Password
@@ -141,14 +144,31 @@ export default function Signup() {
                 className="form-input"
                 placeholder="Create a strong password"
                 autoComplete="new-password"
-                {...register("password", { required: "Password is required" })}
+                {...register("password", {
+                  required: "Password is required",
+                  minLength: {
+                    value: 12,
+                    message: "Password must be at least 12 characters",
+                  },
+                  maxLength: {
+                    value: 128,
+                    message: "Password must be 128 characters or less",
+                  },
+                })}
               />
+
+              {errors.password && (
+                <span className="form-error">{errors.password.message}</span>
+              )}
+
               {passwordValue.length > 0 && (
                 <ul className="password-rules">
                   {ruleResults.map((rule) => (
                     <li
                       key={rule.id}
-                      className={`password-rule ${rule.passed ? "password-rule--pass" : "password-rule--neutral"}`}
+                      className={`password-rule ${
+                        rule.passed ? "password-rule--pass" : "password-rule--neutral"
+                      }`}
                     >
                       <span className="password-rule-icon">
                         {rule.passed ? "✓" : "○"}
@@ -160,7 +180,6 @@ export default function Signup() {
               )}
             </div>
 
-            {/* Confirm Password */}
             <div className="form-group">
               <label className="form-label" htmlFor="confirmPassword">
                 Confirm Password
@@ -175,14 +194,17 @@ export default function Signup() {
                   required: "Please confirm your password",
                 })}
               />
+              {errors.confirmPassword && (
+                <span className="form-error">{errors.confirmPassword.message}</span>
+              )}
             </div>
 
             <button
               type="submit"
               className="btn btn-primary btn-large"
-              disabled={submitting}
+              disabled={isSubmitting}
             >
-              {submitting ? "Creating account…" : "Create Account"}
+              {isSubmitting ? "Creating account..." : "Create Account"}
             </button>
           </form>
 

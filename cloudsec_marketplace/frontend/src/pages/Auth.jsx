@@ -5,32 +5,40 @@ import { useNavigate } from "react-router-dom";
 
 export default function Auth() {
   const [mode, setMode] = useState("signup");
-  const [error, setError] = useState(null);
+  const [error, setError] = useState("");
 
   const navigate = useNavigate();
-
   const { signUp, login } = useAuth();
 
   const {
     register,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, isSubmitting },
+    reset,
   } = useForm();
 
-  function onSubmit(data) {
-    setError(null);
+  async function onSubmit(data) {
+    setError("");
+
     let result;
+
     if (mode === "signup") {
-      result = signUp(data.email, data.password);
+      result = await signUp(data.username, data.email, data.password);
     } else {
-      result = login(data.email, data.password);
+      result = await login(data.username, data.password);
     }
 
     if (result.success) {
       navigate("/");
     } else {
-      setError(result.error);
+      setError(result.error || "Authentication failed.");
     }
+  }
+
+  function switchMode(nextMode) {
+    setError("");
+    reset();
+    setMode(nextMode);
   }
 
   return (
@@ -40,49 +48,98 @@ export default function Auth() {
           <h1 className="page-title">
             {mode === "signup" ? "Sign Up" : "Login"}
           </h1>
-          <form className="auth-form" onSubmit={handleSubmit(onSubmit)}>
+
+          <form className="auth-form" onSubmit={handleSubmit(onSubmit)} noValidate>
             {error && <div className="error-message">{error}</div>}
+
             <div className="form-group">
-              <label className="form-label" htmlFor="email">
-                Email
+              <label className="form-label" htmlFor="username">
+                Username
               </label>
               <input
                 className="form-input"
-                type="email"
-                id="email"
-                {...register("email", { required: "Email is required" })}
+                type="text"
+                id="username"
+                placeholder="Enter your username"
+                {...register("username", {
+                  required: "Username is required",
+                  minLength: {
+                    value: 3,
+                    message: "Username must be at least 3 characters",
+                  },
+                  maxLength: {
+                    value: 30,
+                    message: "Username must be 30 characters or less",
+                  },
+                  pattern: {
+                    value: /^[a-zA-Z0-9_]+$/,
+                    message: "Letters, numbers, and underscores only",
+                  },
+                })}
               />
-              {errors.email && (
-                <span className="form-error">{errors.email.message}</span>
+              {errors.username && (
+                <span className="form-error">{errors.username.message}</span>
               )}
             </div>
+
+            {mode === "signup" && (
+              <div className="form-group">
+                <label className="form-label" htmlFor="email">
+                  Email
+                </label>
+                <input
+                  className="form-input"
+                  type="email"
+                  id="email"
+                  placeholder="Enter your email"
+                  {...register("email", {
+                    required: "Email is required",
+                  })}
+                />
+                {errors.email && (
+                  <span className="form-error">{errors.email.message}</span>
+                )}
+              </div>
+            )}
+
             <div className="form-group">
               <label className="form-label" htmlFor="password">
                 Password
               </label>
               <input
-                {...register("password", {
-                  required: "Password is required",
-                  minLength: {
-                    value: 6,
-                    message: "Password must be at least 6 characters",
-                  },
-                  maxLength: {
-                    value: 12,
-                    message: "Password must be less than 12 characters",
-                  },
-                })}
                 className="form-input"
                 type="password"
                 id="password"
+                placeholder="Enter your password"
+                {...register("password", {
+                  required: "Password is required",
+                  minLength: {
+                    value: 12,
+                    message: "Password must be at least 12 characters",
+                  },
+                  maxLength: {
+                    value: 128,
+                    message: "Password must be 128 characters or less",
+                  },
+                })}
               />
               {errors.password && (
                 <span className="form-error">{errors.password.message}</span>
               )}
             </div>
 
-            <button type="submit" className="btn btn-primary btn-large">
-              {mode === "signup" ? "Sign Up" : "Login"}
+            <button
+              type="submit"
+              className="btn btn-primary btn-large"
+              disabled={isSubmitting}
+            >
+              {isSubmitting
+                ? mode === "signup"
+                  ? "Signing Up..."
+                  : "Logging In..."
+                : mode === "signup"
+                ? "Sign Up"
+                : "Login"}
             </button>
           </form>
 
@@ -90,15 +147,24 @@ export default function Auth() {
             {mode === "signup" ? (
               <p>
                 Already have an account?{" "}
-                <span className="auth-link" onClick={() => setMode("login")}>
+                <span
+                  className="auth-link"
+                  onClick={() => switchMode("login")}
+                  role="button"
+                  tabIndex={0}
+                >
                   Login
                 </span>
               </p>
             ) : (
               <p>
-                {" "}
                 Don't have an account?{" "}
-                <span className="auth-link" onClick={() => setMode("signup")}>
+                <span
+                  className="auth-link"
+                  onClick={() => switchMode("signup")}
+                  role="button"
+                  tabIndex={0}
+                >
                   Sign Up
                 </span>
               </p>
