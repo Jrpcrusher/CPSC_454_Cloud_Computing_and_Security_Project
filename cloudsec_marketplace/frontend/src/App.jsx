@@ -16,6 +16,7 @@ import PortfolioManager from "./pages/PortfolioManager";
 import Transactions from "./pages/Transactions";
 import ImageDetail from "./pages/ImageDetail";
 import PublicImageDetail from "./pages/PublicImageDetail";
+import HealthStatus from "./pages/HealthStatus";
 
 import "./App.css";
 
@@ -40,6 +41,7 @@ function App() {
           <Route path="/dashboard/transactions" element={<Transactions />} />
           <Route path="/dashboard/portfolio/:imageId" element={<ImageDetail />} />
           <Route path="/creator/:userId/images/:imageId" element={<PublicImageDetail />} />
+          <Route path="/status/health" element={<HealthStatus />} />
         </Routes>
       </div>
     </AuthProvider>
