@@ -12,6 +12,53 @@ function formatDate(iso) {
   });
 }
 
+function formatMoney(amount, currency = "usd") {
+  if (typeof amount !== "number") return "N/A";
+  return `$${(amount / 100).toFixed(2)} ${currency.toUpperCase()}`;
+}
+
+function getPaymentStatusLabel(status) {
+  switch (status) {
+    case "pending":
+      return "Payment authorization started";
+    case "funds_held":
+      return "Funds held in escrow";
+    case "released":
+      return "Payment captured";
+    case "payout_sent":
+      return "Payout sent to artist";
+    case "failed":
+      return "Payment failed";
+    case "refunded":
+      return "Payment refunded";
+    case "canceled":
+      return "Payment canceled";
+    default:
+      return status || "No payment yet";
+  }
+}
+
+function getPaymentStatusDescription(status) {
+  switch (status) {
+    case "pending":
+      return "The payment intent was created and is awaiting confirmation or webhook processing.";
+    case "funds_held":
+      return "The buyer's funds are authorized and being held in escrow by the platform.";
+    case "released":
+      return "The payment was captured after escrow conditions were met.";
+    case "payout_sent":
+      return "The artist payout has been sent.";
+    case "failed":
+      return "The payment attempt failed and no escrow is active.";
+    case "refunded":
+      return "The buyer was refunded.";
+    case "canceled":
+      return "The payment was canceled before completion.";
+    default:
+      return "No payment has been attached to this order yet.";
+  }
+}
+
 export default function OrderDetail() {
   const { orderId } = useParams();
   const { user } = useAuth();
@@ -149,7 +196,11 @@ export default function OrderDetail() {
       formData.append("image", file);
 
       await api.post(`/user/me/orders/${orderId}/upload`, formData);
-      setActionMessage("Artwork uploaded.");
+      setActionMessage(
+        order.watermarked_url
+          ? "Artwork replaced successfully."
+          : "Artwork uploaded successfully."
+      );
       await loadOrderDetail();
     } catch (err) {
       setActionError(err.message || "Failed to upload artwork.");
@@ -182,13 +233,18 @@ export default function OrderDetail() {
   }
 
   async function handleRefund() {
+    const confirmed = window.confirm(
+      "Are you sure you want to refund or cancel this payment?"
+    );
+    if (!confirmed) return;
+
     try {
       setRefunding(true);
       setActionError("");
       setActionMessage("");
 
       await api.post(`/payments/${orderId}/refund`);
-      setActionMessage("Refund requested.");
+      setActionMessage("Refund request submitted.");
       await loadOrderDetail();
     } catch (err) {
       setActionError(err.message || "Failed to refund payment.");
@@ -199,7 +255,10 @@ export default function OrderDetail() {
 
   const canArtistAcceptOrDecline = isArtist && order.status === "received";
   const canArtistUpload = isArtist && order.status === "accepted";
-  const canArtistApprove = isArtist && order.status === "accepted" && !order.artist_approval;
+  const canArtistApprove =
+    isArtist &&
+    order.status === "accepted" &&
+    !order.artist_approval;
 
   const canClientApprove =
     isClient &&
@@ -207,8 +266,18 @@ export default function OrderDetail() {
     order.artist_approval === true &&
     !order.client_approval;
 
-  const canClientDownload = isClient && order.status === "completed";
-  const canClientRefund = isClient && !!order.transaction_id;
+  const canClientDownload =
+    isClient &&
+    order.status === "completed";
+
+  const canClientRefund =
+    isClient &&
+    !!order.transaction_id &&
+    paymentStatus &&
+    ["pending", "funds_held", "released"].includes(paymentStatus.status);
+
+  const paymentLabel = getPaymentStatusLabel(paymentStatus?.status);
+  const paymentDescription = getPaymentStatusDescription(paymentStatus?.status);
 
   return (
     <div className="page">
@@ -246,7 +315,7 @@ export default function OrderDetail() {
           <div style={{ display: "grid", gap: "1.5rem" }}>
             <section className="profile-section">
               <h2 className="profile-section-title">Request Description</h2>
-              <p style={{ whiteSpace: "pre-wrap", marginTop: "1rem" }}>
+              <p style={{ whiteSpace: "pre-wrap", marginTop: "1rem", color: "#b5bac1" }}>
                 {order.order_details}
               </p>
             </section>
@@ -269,6 +338,11 @@ export default function OrderDetail() {
                       marginTop: "0.75rem",
                     }}
                   />
+                  {canArtistUpload && (
+                    <p style={{ marginTop: "0.75rem", fontSize: "0.9rem", color: "#888" }}>
+                      You can upload a new version to replace the current artwork before final approval.
+                    </p>
+                  )}
                 </div>
               ) : (
                 <div className="empty-state" style={{ marginTop: "1rem" }}>
@@ -336,11 +410,11 @@ export default function OrderDetail() {
                     />
 
                     <button
-                    className="btn btn-secondary"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={uploading}
+                      className="btn btn-secondary"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploading}
                     >
-                    {uploading
+                      {uploading
                         ? "Uploading..."
                         : order.watermarked_url
                         ? "Replace Artwork"
@@ -394,6 +468,9 @@ export default function OrderDetail() {
                   <strong>Created:</strong> {formatDate(order.creation_date)}
                 </div>
                 <div>
+                  <strong>Amount:</strong> {formatMoney(order.amount, order.currency)}
+                </div>
+                <div>
                   <strong>Transaction attached:</strong> {order.transaction_id ? "Yes" : "No"}
                 </div>
                 <div>
@@ -418,24 +495,36 @@ export default function OrderDetail() {
               </div>
             </section>
 
-            {paymentStatus && (
-              <section className="profile-section">
-                <h2 className="profile-section-title">Payment</h2>
+            <section className="profile-section">
+              <h2 className="profile-section-title">Payment / Escrow</h2>
 
-                <div style={{ marginTop: "1rem", display: "grid", gap: "0.75rem" }}>
-                  <div>
-                    <strong>Status:</strong> {paymentStatus.status}
-                  </div>
-                  <div>
-                    <strong>Amount:</strong> ${(paymentStatus.amount / 100).toFixed(2)}{" "}
-                    {paymentStatus.currency?.toUpperCase()}
-                  </div>
-                  <div>
-                    <strong>Created:</strong> {formatDate(paymentStatus.created_at)}
-                  </div>
+              <div style={{ marginTop: "1rem", display: "grid", gap: "0.75rem" }}>
+                <div>
+                  <strong>Status:</strong> {paymentLabel}
                 </div>
-              </section>
-            )}
+                <div style={{ color: "#b5bac1", lineHeight: 1.6 }}>
+                  {paymentDescription}
+                </div>
+
+                {paymentStatus && (
+                  <>
+                    <div>
+                      <strong>Escrow Amount:</strong>{" "}
+                      {formatMoney(paymentStatus.amount, paymentStatus.currency)}
+                    </div>
+                    <div>
+                      <strong>Updated:</strong> {formatDate(paymentStatus.updated_at)}
+                    </div>
+                  </>
+                )}
+
+                {!paymentStatus && (
+                  <div style={{ color: "#888" }}>
+                    No payment has been started for this order yet.
+                  </div>
+                )}
+              </div>
+            </section>
           </div>
         </div>
       </div>
