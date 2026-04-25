@@ -15,6 +15,7 @@ import AuthProvider from "./context/AuthContext";
 import CreatorImageDetail from "./pages/CreatorImageDetail";
 import PortfolioManager from "./pages/PortfolioManager";
 import Transactions from "./pages/Transactions";
+import ImageDetail from "./pages/ImageDetail";
 
 import "./App.css";
 
@@ -38,6 +39,7 @@ function App() {
           <Route path="/creator/:userId/images/:imageId" element={<CreatorImageDetail />} />
           <Route path="/dashboard/portfolio" element={<PortfolioManager />} />
           <Route path="/dashboard/transactions" element={<Transactions />} />
+          <Route path="/dashboard/portfolio/:imageId" element={<ImageDetail />} />
         </Routes>
       </div>
     </AuthProvider>

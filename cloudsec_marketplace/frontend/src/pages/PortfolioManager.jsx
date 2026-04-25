@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import api from "../services/apiClient";
+
 
 function formatDate(iso) {
   if (!iso) return "N/A";
@@ -232,11 +234,14 @@ export default function PortfolioManager() {
 
                   return (
                     <div className="portfolio-item" key={imageId}>
-                      <img
-                        src={src}
-                        alt={img.description || "Portfolio image"}
-                        className="portfolio-img"
-                      />
+                      <Link to={`/dashboard/portfolio/${imageId}`}>
+                        <img
+                          src={src}
+                          alt={img.description || "Portfolio image"}
+                          className="portfolio-img"
+                          style={{ cursor: "pointer" }}
+                        />
+                      </Link>
 
                       <div style={{ marginTop: "0.75rem", display: "grid", gap: "0.35rem" }}>
                         {img.description && (
