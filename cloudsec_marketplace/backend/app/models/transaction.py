@@ -32,8 +32,6 @@ class Transaction(BaseModel):
 class CreatePaymentRequest(BaseModel):
     """Request body when a buyer initiates payment for an order."""
     order_id: UUID
-    amount: int = Field(gt=0, description="Amount in cents (e.g. 2500 = $25.00)")
-    currency: str = "usd"
 
 
 class PaymentIntentResponse(BaseModel):
