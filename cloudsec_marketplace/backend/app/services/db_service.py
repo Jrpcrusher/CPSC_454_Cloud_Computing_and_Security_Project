@@ -283,30 +283,32 @@ def search_users(query, db, include_private: bool = False):
 
     return result
 
-def create_order(artist_id : str, client_id : str, order_object, db):
+def create_order(artist_id: str, client_id: str, order_object, db):
     artist = db["user"].find_one({"user_id": artist_id})
     if not artist:
         raise HTTPException(status_code=404, detail="Artist not found")
-    
+
     client = db["user"].find_one({"user_id": client_id})
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
-    
+
     if client_id == artist_id:
         raise HTTPException(status_code=400, detail="You cannot order from yourself!")
 
-    client_info = { # get information about the requester
+    client_info = {
         "user_id": client["user_id"],
         "username": client["username"],
         "email": client["email"],
-        "pfp_key": client["pfp_key"]
+        "pfp_key": client.get("pfp_key"),
+        "pfp_url": client.get("pfp_url"),
     }
 
-    artist_info = { # get the information about the artist
+    artist_info = {
         "user_id": artist["user_id"],
         "username": artist["username"],
         "email": artist["email"],
-        "pfp_key": artist["pfp_key"]
+        "pfp_key": artist.get("pfp_key"),
+        "pfp_url": artist.get("pfp_url"),
     }
 
     order = {
@@ -316,10 +318,14 @@ def create_order(artist_id : str, client_id : str, order_object, db):
         "order_details": order_object.order_details,
         "creation_date": datetime.now(timezone.utc),
         "status": "received",
+        "client_approval": False,
+        "artist_approval": False,
         "transaction_id": None,
+        "amount": order_object.amount,
+        "currency": order_object.currency,
     }
-    db["order"].insert_one(order)
 
+    db["order"].insert_one(order)
     return order
 
 def change_settings(user_id, new_settings, db):
