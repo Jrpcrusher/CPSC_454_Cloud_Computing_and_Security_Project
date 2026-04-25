@@ -132,11 +132,13 @@ export default function CreatorProfile() {
 
                   return (
                     <div key={imageId} className="portfolio-item">
-                      <img
-                        src={imageSrc}
-                        alt={image.description || `Artwork ${imageId}`}
-                        className="portfolio-img"
-                      />
+                      <Link to={`/creator/${userId}/images/${imageId}`}>
+                        <img
+                          src={imageSrc}
+                          alt={image.description || `Artwork ${imageId}`}
+                          className="portfolio-img"
+                        />
+                      </Link>
                     </div>
                   );
                 })}

@@ -12,10 +12,10 @@ import OnboardComplete from "./pages/OnboardComplete";
 import OnboardRefresh from "./pages/OnboardRefresh";
 import OrderDetail from "./pages/OrderDetail";
 import AuthProvider from "./context/AuthContext";
-import CreatorImageDetail from "./pages/CreatorImageDetail";
 import PortfolioManager from "./pages/PortfolioManager";
 import Transactions from "./pages/Transactions";
 import ImageDetail from "./pages/ImageDetail";
+import PublicImageDetail from "./pages/PublicImageDetail";
 
 import "./App.css";
 
@@ -36,10 +36,10 @@ function App() {
           <Route path="/orders/:orderId" element={<OrderDetail />} />
           <Route path="/artist/onboard/complete" element={<OnboardComplete />} />
           <Route path="/artist/onboard/refresh" element={<OnboardRefresh />} />
-          <Route path="/creator/:userId/images/:imageId" element={<CreatorImageDetail />} />
           <Route path="/dashboard/portfolio" element={<PortfolioManager />} />
           <Route path="/dashboard/transactions" element={<Transactions />} />
           <Route path="/dashboard/portfolio/:imageId" element={<ImageDetail />} />
+          <Route path="/creator/:userId/images/:imageId" element={<PublicImageDetail />} />
         </Routes>
       </div>
     </AuthProvider>
