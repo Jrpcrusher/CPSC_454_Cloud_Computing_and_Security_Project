@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import api from "../services/apiClient";
 
 function formatDate(iso) {
@@ -19,6 +19,8 @@ export default function PortfolioManager() {
   const [deletingId, setDeletingId] = useState(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+
+  const fileInputRef = useRef(null);
 
   async function loadImages() {
     const res = await api.get("/user/me/images");
@@ -58,7 +60,6 @@ export default function PortfolioManager() {
 
   async function handleUpload(e) {
     e.preventDefault();
-
     if (!file) return;
 
     try {
@@ -79,9 +80,8 @@ export default function PortfolioManager() {
       setDescription("");
       setFile(null);
 
-      const fileInput = document.getElementById("portfolio-upload-input");
-      if (fileInput) {
-        fileInput.value = "";
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
       }
 
       await loadImages();
@@ -122,43 +122,94 @@ export default function PortfolioManager() {
             {message && <p style={{ color: "#4caf50" }}>{message}</p>}
 
             <form className="request-form" onSubmit={handleUpload} noValidate>
-              <div className="form-group">
-                <label className="form-label" htmlFor="portfolio-upload-input">
-                  Upload New Image
-                </label>
-                <input
-                  id="portfolio-upload-input"
-                  type="file"
-                  accept="image/*"
-                  className="form-input"
-                  onChange={(e) => setFile(e.target.files?.[0] || null)}
-                  required
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label" htmlFor="portfolio-description">
-                  Description
-                  <span className="form-label-hint"> (optional)</span>
-                </label>
-                <input
-                  id="portfolio-description"
-                  type="text"
-                  className="form-input"
-                  placeholder="Optional image description"
-                  value={description}
-                  maxLength={500}
-                  onChange={(e) => setDescription(e.target.value)}
-                />
-              </div>
-
-              <button
-                className="btn btn-primary"
-                type="submit"
-                disabled={uploading || !file}
+              <div
+                style={{
+                  display: "grid",
+                  gap: "1rem",
+                  padding: "1rem",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  borderRadius: "14px",
+                  background: "rgba(255,255,255,0.02)",
+                }}
               >
-                {uploading ? "Uploading..." : "Upload Image"}
-              </button>
+                <div>
+                  <label className="form-label">Upload New Image</label>
+
+                  <input
+                    ref={fileInputRef}
+                    id="portfolio-upload-input"
+                    type="file"
+                    accept="image/*"
+                    style={{ display: "none" }}
+                    onChange={(e) => setFile(e.target.files?.[0] || null)}
+                    required
+                  />
+
+                  <div
+                    style={{
+                      marginTop: "0.5rem",
+                      display: "flex",
+                      gap: "0.75rem",
+                      alignItems: "center",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      Choose Image
+                    </button>
+
+                    <span style={{ color: file ? "#fff" : "#888", fontSize: "0.95rem" }}>
+                      {file ? file.name : "No file selected"}
+                    </span>
+                  </div>
+
+                  <p style={{ color: "#888", fontSize: "0.85rem", marginTop: "0.6rem" }}>
+                    Upload one image at a time. Supported formats depend on the browser.
+                  </p>
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label" htmlFor="portfolio-description">
+                    Description
+                    <span className="form-label-hint"> (optional)</span>
+                  </label>
+                  <input
+                    id="portfolio-description"
+                    type="text"
+                    className="form-input"
+                    placeholder="Optional image description"
+                    value={description}
+                    maxLength={500}
+                    onChange={(e) => setDescription(e.target.value)}
+                  />
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: "1rem",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <span style={{ color: "#888", fontSize: "0.85rem" }}>
+                    {description.length} / 500 characters
+                  </span>
+
+                  <button
+                    className="btn btn-primary"
+                    type="submit"
+                    disabled={uploading || !file}
+                  >
+                    {uploading ? "Uploading..." : "Upload Image"}
+                  </button>
+                </div>
+              </div>
             </form>
           </section>
 
@@ -177,8 +228,7 @@ export default function PortfolioManager() {
               <div className="portfolio-grid" style={{ marginTop: "1rem" }}>
                 {images.map((img) => {
                   const imageId = img.image_id;
-                  const src =
-                    img.image_url || `/user/me/images/${imageId}`;
+                  const src = img.image_url || `/user/me/images/${imageId}`;
 
                   return (
                     <div className="portfolio-item" key={imageId}>
