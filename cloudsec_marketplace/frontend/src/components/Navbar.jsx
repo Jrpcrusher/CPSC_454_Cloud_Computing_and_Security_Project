@@ -13,83 +13,94 @@ export default function Navbar() {
 
   return (
     <nav className="navbar">
-      <Link to="/" className="navbar-brand">
-        <img src={Logo} alt="Logo" className="navbar-logo" />
-      </Link>
+      <div className="navbar-container">
+        <Link to="/" className="navbar-brand-link">
+          <img src={Logo} alt="Logo" className="logoImg" />
+        </Link>
 
-      <div className="navbar-links">
-        <NavLink
-          to="/"
-          className={({ isActive }) =>
-            "navbar-link" + (isActive ? " navbar-link--active" : "")
-          }
-        >
-          Explore
-        </NavLink>
-
-        {user && (
+        <div className="navbar-links">
           <NavLink
-            to="/dashboard"
+            to="/"
+            end
             className={({ isActive }) =>
               "navbar-link" + (isActive ? " navbar-link--active" : "")
             }
           >
-            Dashboard
+            Explore
           </NavLink>
-        )}
 
-        {user && (
-          <NavLink
-            to="/dashboard/transactions"
-            className={({ isActive }) =>
-              "navbar-link" + (isActive ? " navbar-link--active" : "")
-            }
-          >
-            Transactions
-          </NavLink>
-        )}
+          {user && (
+            <NavLink
+              to="/dashboard"
+              end
+              className={({ isActive }) =>
+                "navbar-link" + (isActive ? " navbar-link--active" : "")
+              }
+            >
+              Dashboard
+            </NavLink>
+          )}
 
-        {user && isCreator && (
-          <NavLink
-            to="/dashboard/portfolio"
-            className={({ isActive }) =>
-              "navbar-link" + (isActive ? " navbar-link--active" : "")
-            }
-          >
-            Portfolio
-          </NavLink>
-        )}
+          {user && isCreator && user.user_id && (
+            <NavLink
+              to={`/creator/${user.user_id}`}
+              className={({ isActive }) =>
+                "navbar-link" + (isActive ? " navbar-link--active" : "")
+              }
+            >
+              My Profile
+            </NavLink>
+          )}
 
-        {user && isCreator && user.user_id && (
-          <NavLink
-            to={`/creator/${user.user_id}`}
-            className={({ isActive }) =>
-              "navbar-link" + (isActive ? " navbar-link--active" : "")
-            }
-          >
-            My Profile
-          </NavLink>
-        )}
-      </div>
+          {user && (
+            <NavLink
+              to="/dashboard/transactions"
+              className={({ isActive }) =>
+                "navbar-link" + (isActive ? " navbar-link--active" : "")
+              }
+            >
+              Transactions
+            </NavLink>
+          )}
 
-      <div className="navbar-actions">
-        {!user ? (
-          <>
-            <Link to="/login" className="btn btn-secondary">
-              Log In
-            </Link>
-            <Link to="/signup" className="btn btn-primary">
-              Sign Up
-            </Link>
-          </>
-        ) : (
-          <>
-            <span className="navbar-user">{user.username}</span>
-            <button className="btn btn-secondary" onClick={handleLogout}>
-              Log Out
-            </button>
-          </>
-        )}
+          {user && isCreator && (
+            <NavLink
+              to="/dashboard/portfolio"
+              className={({ isActive }) =>
+                "navbar-link" + (isActive ? " navbar-link--active" : "")
+              }
+            >
+              Portfolio
+            </NavLink>
+          )}
+        </div>
+
+        <div className="navbar-auth">
+          {!user ? (
+            <div className="navbar-auth-links">
+              <Link to="/login" className="btn btn-secondary btn-small">
+                Log In
+              </Link>
+              <Link to="/signup" className="btn btn-primary btn-small">
+                Sign Up
+              </Link>
+            </div>
+          ) : (
+            <div className="navbar-user">
+              <Link
+                to="/dashboard"
+                className="navbar-username-btn"
+                title={user.email}
+              >
+                {user.username}
+              </Link>
+
+              <button className="btn btn-primary btn-small" onClick={handleLogout}>
+                Log Out
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </nav>
   );
