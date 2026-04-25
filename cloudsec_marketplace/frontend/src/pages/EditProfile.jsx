@@ -2,10 +2,10 @@ import { useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import api from "../services/apiClient";
 
 const MAX_DESCRIPTION = 500;
 
-// Compress image to a square JPEG blob
 function compressAvatarToBlob(file, maxPx = 300) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -58,7 +58,7 @@ function formatDate(iso) {
 }
 
 export default function EditProfile() {
-  const { user, updateProfile } = useAuth();
+  const { user, updateProfile, logout } = useAuth();
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
 
@@ -67,6 +67,8 @@ export default function EditProfile() {
   const [uploadError, setUploadError] = useState("");
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   const {
     register,
@@ -149,6 +151,27 @@ export default function EditProfile() {
       }
     } catch {
       setSaveError("Failed to save profile.");
+    }
+  }
+
+  async function handleDeleteAccount() {
+    const confirmed = window.confirm(
+      "Are you sure you want to delete your account? This action cannot be undone."
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setDeletingAccount(true);
+      setDeleteError("");
+
+      await api.delete("/user/me");
+      await logout();
+      navigate("/");
+    } catch (err) {
+      setDeleteError(err.message || "Failed to delete account.");
+    } finally {
+      setDeletingAccount(false);
     }
   }
 
@@ -300,6 +323,43 @@ export default function EditProfile() {
                 {saved ? "Saved" : isSubmitting ? "Saving..." : "Save Changes"}
               </button>
             </form>
+
+            <section
+              className="profile-section"
+              style={{
+                marginTop: "2rem",
+                borderColor: "rgba(237,66,69,0.3)",
+                background: "rgba(237,66,69,0.04)",
+              }}
+            >
+              <h2 className="profile-section-title" style={{ color: "#ed4245" }}>
+                Delete Account
+              </h2>
+
+              <p style={{ color: "#b5bac1", marginTop: "0.75rem" }}>
+                This permanently deletes your account. This action cannot be undone.
+              </p>
+
+              {deleteError && (
+                <p className="form-error" style={{ marginTop: "0.75rem" }}>
+                  {deleteError}
+                </p>
+              )}
+
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={handleDeleteAccount}
+                disabled={deletingAccount}
+                style={{
+                  marginTop: "1rem",
+                  background: "#ed4245",
+                  color: "#fff",
+                }}
+              >
+                {deletingAccount ? "Deleting Account..." : "Delete My Account"}
+              </button>
+            </section>
           </div>
         </div>
       </div>
