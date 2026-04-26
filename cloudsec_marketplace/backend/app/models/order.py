@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from datetime import datetime
 from .user import UserSummary
 from uuid import UUID
@@ -20,9 +20,13 @@ class Order(BaseModel): # Generic order model
     client_approval: bool = False
     artist_approval: bool = False
     transaction_id: UUID | None = None  # Links to Transaction (set when buyer pays)
+    amount: int | None = None
+    currency: str = "usd"
 
 class CreateOrderRequest(BaseModel): # The response model for when we create an order
     order_details: str
+    amount: int = Field(gt=0, description="Amount in cents")
+    currency: str = "usd"
 
 class OrderApprovalResponse(BaseModel): # The response model for order, saying if artist and client happy
     order_id: UUID

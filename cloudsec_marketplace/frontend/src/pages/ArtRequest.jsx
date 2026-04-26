@@ -1,29 +1,30 @@
-import { useState, useEffect, useRef } from "react";
-import { useParams, useLocation, useNavigate, Link } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
-import { getCreatorByUsername, backendProfileToCreator } from "../data/creators";
 import { useAuth } from "../context/AuthContext";
-import { useRequests } from "../context/RequestContext";
 import api from "../services/apiClient";
 
-// ── Stripe Payment Step ───────────────────────────────────────────────────────
-function PaymentStep({ orderId, amountCents, onSuccess }) {
+function PaymentStep({ order, onSuccess, onError }) {
   const cardRef = useRef(null);
   const stripeRef = useRef(null);
   const cardElRef = useRef(null);
-  const [cardError, setCardError] = useState(null);
+
+  const [loadingStripe, setLoadingStripe] = useState(true);
   const [paying, setPaying] = useState(false);
-  const [stripeError, setStripeError] = useState(null);
+  const [cardError, setCardError] = useState("");
 
   useEffect(() => {
     let active = true;
-    api
-      .get("/payments/config")
-      .then(({ publishable_key }) => {
+
+    async function setupStripe() {
+      try {
+        const config = await api.get("/payments/config");
+
         if (!active || !cardRef.current) return;
-        const stripe = window.Stripe(publishable_key);
+
+        const stripe = window.Stripe(config.publishable_key);
         const elements = stripe.elements();
-        const cardEl = elements.create("card", {
+        const card = elements.create("card", {
           style: {
             base: {
               fontSize: "16px",
@@ -32,12 +33,24 @@ function PaymentStep({ orderId, amountCents, onSuccess }) {
             },
           },
         });
-        cardEl.mount(cardRef.current);
-        cardEl.on("change", (e) => setCardError(e.error?.message || null));
+
+        card.mount(cardRef.current);
+        card.on("change", (event) => {
+          setCardError(event.error?.message || "");
+        });
+
         stripeRef.current = stripe;
-        cardElRef.current = cardEl;
-      })
-      .catch(() => setStripeError("Failed to load Stripe. Please refresh and try again."));
+        cardElRef.current = card;
+      } catch (err) {
+        setCardError(err.message || "Failed to load Stripe.");
+      } finally {
+        if (active) {
+          setLoadingStripe(false);
+        }
+      }
+    }
+
+    setupStripe();
 
     return () => {
       active = false;
@@ -47,226 +60,263 @@ function PaymentStep({ orderId, amountCents, onSuccess }) {
 
   async function handlePay() {
     if (!stripeRef.current || !cardElRef.current) return;
-    setPaying(true);
-    setCardError(null);
+
     try {
-      const { client_secret } = await api.post("/payments/create-intent", {
-        order_id: orderId,
-        amount: amountCents,
-        currency: "usd",
+      setPaying(true);
+      setCardError("");
+
+      const intent = await api.post("/payments/create-intent", {
+        order_id: order.order_id,
       });
 
-      const { error, paymentIntent } = await stripeRef.current.confirmCardPayment(
-        client_secret,
-        { payment_method: { card: cardElRef.current } },
+      const result = await stripeRef.current.confirmCardPayment(
+        intent.client_secret,
+        {
+          payment_method: {
+            card: cardElRef.current,
+          },
+        }
       );
 
-      if (error) {
-        setCardError(error.message);
-      } else if (paymentIntent.status === "requires_capture") {
-        onSuccess();
+      if (result.error) {
+        setCardError(result.error.message || "Payment failed.");
+        onError?.(result.error.message || "Payment failed.");
+        return;
       }
+
+      onSuccess();
     } catch (err) {
-      setCardError(err.message || "Payment failed. Please try again.");
+      setCardError(err.message || "Payment failed.");
+      onError?.(err.message || "Payment failed.");
     } finally {
       setPaying(false);
     }
   }
 
-  const displayAmount = (amountCents / 100).toFixed(2);
+  const amountDisplay =
+    typeof order.amount === "number"
+      ? `$${(order.amount / 100).toFixed(2)}`
+      : "N/A";
 
   return (
-    <div className="success-panel" style={{ textAlign: "left", maxWidth: 480, margin: "0 auto" }}>
+    <div className="success-panel" style={{ textAlign: "left", maxWidth: 520, margin: "0 auto" }}>
       <div className="success-icon">💳</div>
-      <h2 className="success-title">Complete Payment</h2>
+      <h2 className="success-title">Authorize Payment</h2>
       <p className="success-desc">
-        Your commission request has been submitted. To confirm it, your payment of{" "}
-        <strong>${displayAmount}</strong> will be held securely in escrow — you won't be
-        charged until the work is completed and approved by both parties.
+        Your request has been created. To continue, authorize{" "}
+        <strong>{amountDisplay}</strong>. The funds will be held in escrow and
+        only captured after artwork is uploaded and both sides approve.
       </p>
 
-      {stripeError ? (
-        <div className="error-message">{stripeError}</div>
-      ) : (
-        <>
-          <div
-            ref={cardRef}
-            style={{
-              border: "1px solid #444",
-              borderRadius: 6,
-              padding: "12px 14px",
-              marginBottom: "1rem",
-              background: "#2b2d31",
-            }}
-          />
-          {cardError && <p className="form-error" style={{ marginBottom: "0.75rem" }}>{cardError}</p>}
-          <button
-            className="btn btn-primary btn-large"
-            onClick={handlePay}
-            disabled={paying}
-            style={{ width: "100%" }}
-          >
-            {paying ? "Processing…" : `Hold $${displayAmount} in Escrow`}
-          </button>
-          <p style={{ fontSize: "0.8rem", color: "#888", marginTop: "0.75rem", textAlign: "center" }}>
-            Funds are released to the artist only after you approve the final work.
-          </p>
-        </>
-      )}
+      <div
+        ref={cardRef}
+        style={{
+          border: "1px solid #444",
+          borderRadius: 8,
+          padding: "12px 14px",
+          marginTop: "1rem",
+          marginBottom: "1rem",
+          background: "#2b2d31",
+          minHeight: "46px",
+        }}
+      />
+
+      {cardError && <p className="form-error">{cardError}</p>}
+
+      <button
+        className="btn btn-primary btn-large"
+        onClick={handlePay}
+        disabled={loadingStripe || paying}
+        style={{ width: "100%", marginTop: "0.75rem" }}
+      >
+        {loadingStripe ? "Loading payment form..." : paying ? "Authorizing..." : "Authorize Payment"}
+      </button>
     </div>
   );
 }
 
-// ── Main Component ────────────────────────────────────────────────────────────
 export default function ArtRequest() {
-  const { username } = useParams();
-  const location = useLocation();
+  const { userId } = useParams();
   const navigate = useNavigate();
-
-  const localCreator = getCreatorByUsername(username);
-  const [creator, setCreator] = useState(localCreator);
-  const [creatorLoading, setCreatorLoading] = useState(!localCreator);
-
   const { user } = useAuth();
-  const { submitRequest } = useRequests();
 
-  const [submitError, setSubmitError] = useState(null);
+  const [creator, setCreator] = useState(null);
+  const [creatorLoading, setCreatorLoading] = useState(true);
+  const [submitError, setSubmitError] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [paymentStep, setPaymentStep] = useState(false);
-  const [pendingOrderId, setPendingOrderId] = useState(null);
-  const [pendingAmountCents, setPendingAmountCents] = useState(0);
-
-  useEffect(() => {
-    if (creator) return;
-    let cancelled = false;
-    api
-      .get("/home/profiles")
-      .then((profiles) => {
-        if (cancelled) return;
-        const match = profiles.find(
-          (p) => (p.creator_username || p.username) === username
-        );
-        setCreator(match ? backendProfileToCreator(match) : null);
-        setCreatorLoading(false);
-      })
-      .catch(() => {
-        if (!cancelled) setCreatorLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [username]);
-
-  useEffect(() => {
-    if (user?.creatorUsername === username) {
-      navigate(`/creator/${username}`, { replace: true });
-    }
-  }, [user, username, navigate]);
-
-  const defaultTier = location.state?.selectedTier || (creator?.tiers?.[0]?.name ?? "");
+  const [createdOrder, setCreatedOrder] = useState(null);
 
   const {
     register,
     handleSubmit,
-    watch,
     formState: { errors, isSubmitting },
-  } = useForm({ defaultValues: { tier: defaultTier } });
+  } = useForm({
+    defaultValues: {
+      order_details: "",
+      amountDollars: "",
+    },
+  });
 
-  const selectedTierName = watch("tier");
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadCreator() {
+      try {
+        setCreatorLoading(true);
+        const res = await api.get(`/home/profiles/${userId}`);
+        if (!cancelled) {
+          setCreator(res);
+        }
+      } catch {
+        if (!cancelled) {
+          setCreator(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setCreatorLoading(false);
+        }
+      }
+    }
+
+    loadCreator();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
 
   if (creatorLoading) {
     return (
-      <div className="page"><div className="container">
-        <p style={{ padding: "2rem", color: "#888" }}>Loading…</p>
-      </div></div>
+      <div className="page">
+        <div className="container">
+          <p style={{ padding: "2rem", color: "#888" }}>Loading...</p>
+        </div>
+      </div>
     );
   }
 
   if (!creator) {
     return (
-      <div className="page"><div className="container">
-        <div className="empty-state">
-          <h2>Creator not found</h2>
-          <Link to="/" className="btn btn-primary" style={{ marginTop: "1rem" }}>Back to Home</Link>
+      <div className="page">
+        <div className="container">
+          <div className="empty-state">
+            <h2>Creator not found</h2>
+            <p>We could not find that creator profile.</p>
+            <Link to="/" className="btn btn-primary" style={{ marginTop: "1rem" }}>
+              Back to Home
+            </Link>
+          </div>
         </div>
-      </div></div>
+      </div>
     );
   }
 
   if (!user) {
     return (
-      <div className="page"><div className="container">
-        <div className="empty-state">
-          <h2>You need to be logged in</h2>
-          <p>Please log in or create an account to request art.</p>
-          <Link to="/login" className="btn btn-primary" style={{ marginTop: "1rem" }}>Log In / Sign Up</Link>
-        </div>
-      </div></div>
-    );
-  }
-
-  async function onSubmit(data) {
-    setSubmitError(null);
-
-    const result = await submitRequest(
-      {
-        creatorUsername: username,
-        requesterEmail: user.email || user.username,
-        ...data,
-      },
-      creator.user_id || null,
-    );
-
-    if (!result.success) {
-      setSubmitError(result.error || "Failed to submit request. Please try again.");
-      return;
-    }
-
-    // If creator has a backend user_id, proceed to Stripe payment
-    if (creator.user_id && !result.isLocal) {
-      const selectedTier = creator.tiers?.find((t) => t.name === data.tier);
-      const amountCents = selectedTier ? Math.round(selectedTier.price * 100) : 0;
-
-      if (amountCents > 0) {
-        setPendingOrderId(result.request._backendId || result.request.id);
-        setPendingAmountCents(amountCents);
-        setPaymentStep(true);
-        return;
-      }
-    }
-
-    // Mock creator or no tier price — skip payment
-    setSubmitted(true);
-  }
-
-  if (submitted) {
-    return (
-      <div className="page"><div className="container">
-        <div className="success-panel">
-          <div className="success-icon">🎉</div>
-          <h2 className="success-title">Request Submitted!</h2>
-          <p className="success-desc">
-            Your request has been sent to <strong>{creator.displayName}</strong>.
-            They'll review it and respond soon. Track it in your Dashboard.
-          </p>
-          <div className="success-actions">
-            <Link to="/dashboard" className="btn btn-primary">Go to Dashboard</Link>
-            <Link to={`/creator/${username}`} className="btn btn-secondary">Back to Profile</Link>
+      <div className="page">
+        <div className="container">
+          <div className="empty-state">
+            <h2>You need to be logged in</h2>
+            <p>Please log in or create an account to request art.</p>
+            <Link to="/login" className="btn btn-primary" style={{ marginTop: "1rem" }}>
+              Log In
+            </Link>
           </div>
         </div>
-      </div></div>
+      </div>
     );
   }
 
-  if (paymentStep) {
+  const isOwnProfile = user.user_id === creator.user_id;
+
+  if (isOwnProfile) {
     return (
-      <div className="page"><div className="container">
-        <PaymentStep
-          orderId={pendingOrderId}
-          amountCents={pendingAmountCents}
-          onSuccess={() => setSubmitted(true)}
-        />
-      </div></div>
+      <div className="page">
+        <div className="container">
+          <div className="empty-state">
+            <h2>This is your own profile</h2>
+            <p>You cannot submit a commission request to yourself.</p>
+            <Link
+              to={`/creator/${userId}`}
+              className="btn btn-primary"
+              style={{ marginTop: "1rem" }}
+            >
+              Back to Profile
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const displayName =
+    creator.creator_username || creator.username || `User ${creator.user_id}`;
+
+  const avatarUrl =
+    creator.pfp_url ||
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=5865f2&color=fff&size=80`;
+
+  async function onSubmit(data) {
+    try {
+      setSubmitError("");
+
+      const amount = Math.round(Number(data.amountDollars) * 100);
+
+      if (!amount || amount <= 0) {
+        setSubmitError("Please enter a valid amount.");
+        return;
+      }
+
+      const order = await api.post(`/home/profiles/${userId}/request`, {
+        order_details: data.order_details,
+        amount,
+        currency: "usd",
+      });
+
+      setCreatedOrder(order);
+      setPaymentStep(true);
+    } catch (err) {
+      setSubmitError(err.message || "Failed to submit request.");
+    }
+  }
+
+  if (submitted && createdOrder) {
+    return (
+      <div className="page">
+        <div className="container">
+          <div className="success-panel">
+            <div className="success-icon">🎉</div>
+            <h2 className="success-title">Request Submitted</h2>
+            <p className="success-desc">
+              Your request was sent to <strong>{displayName}</strong> and your
+              payment has been authorized and placed in escrow.
+            </p>
+            <div className="success-actions">
+              <Link to={`/orders/${createdOrder.order_id}`} className="btn btn-primary">
+                View Order
+              </Link>
+              <Link to="/dashboard" className="btn btn-secondary">
+                Go to Dashboard
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (paymentStep && createdOrder) {
+    return (
+      <div className="page">
+        <div className="container">
+          <PaymentStep
+            order={createdOrder}
+            onSuccess={() => setSubmitted(true)}
+            onError={(msg) => setSubmitError(msg)}
+          />
+        </div>
+      </div>
     );
   }
 
@@ -274,147 +324,95 @@ export default function ArtRequest() {
     <div className="page">
       <div className="container">
         <div className="request-form-layout">
-          {/* Creator summary sidebar */}
           <aside className="request-creator-summary">
             <img
-              src={creator.avatar}
-              alt={creator.displayName}
+              src={avatarUrl}
+              alt={displayName}
               className="request-creator-avatar"
               onError={(e) => {
-                e.target.src = `https://ui-avatars.com/api/?name=${creator.displayName}&background=5865f2&color=fff&size=80`;
+                e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=5865f2&color=fff&size=80`;
               }}
             />
-            <h3 className="request-creator-name">{creator.displayName}</h3>
-            <span className="request-creator-handle">@{username}</span>
-            <div className="creator-card-tags" style={{ marginTop: "0.75rem" }}>
-              {(creator.tags || []).map((tag) => (
-                <span key={tag} className="tag">{tag}</span>
-              ))}
-            </div>
-            {creator.tiers?.length > 0 && (
-              <div className="request-tier-preview">
-                <h4 className="request-tier-preview-title">Available Tiers</h4>
-                {creator.tiers.map((t) => (
-                  <div key={t.name} className="request-tier-preview-row">
-                    <span>{t.name}</span>
-                    <span className="tier-price-inline">${t.price}</span>
-                  </div>
-                ))}
-              </div>
+            <h3 className="request-creator-name">{displayName}</h3>
+
+            {creator.username && (
+              <span className="request-creator-handle">@{creator.username}</span>
             )}
+
+            <p style={{ marginTop: "1rem", color: "#b5bac1" }}>
+              {creator.description || "No description provided."}
+            </p>
+
             <Link
-              to={`/creator/${username}`}
+              to={`/creator/${userId}`}
               className="btn btn-secondary btn-block"
               style={{ marginTop: "1rem" }}
             >
-              ← Back to Profile
+              Back to Profile
             </Link>
           </aside>
 
-          {/* Request form */}
           <div className="request-form-main">
-            <h1 className="page-title">Request Art from {creator.displayName}</h1>
+            <h1 className="page-title">Request Art from {displayName}</h1>
             <p className="request-form-sub">
-              Be as detailed as possible — the more info you provide, the better the result.
+              Submit your request first, then authorize payment to place funds in escrow.
             </p>
 
             {submitError && <div className="error-message">{submitError}</div>}
 
             <form className="request-form" onSubmit={handleSubmit(onSubmit)} noValidate>
-              {creator.tiers?.length > 0 && (
-                <div className="form-group">
-                  <label className="form-label" htmlFor="tier">Commission Tier *</label>
-                  <select id="tier" className="form-input" {...register("tier", { required: "Please select a tier" })}>
-                    {creator.tiers.map((t) => (
-                      <option key={t.name} value={t.name}>{t.name} — ${t.price}</option>
-                    ))}
-                  </select>
-                  {errors.tier && <p className="form-error">{errors.tier.message}</p>}
-                </div>
-              )}
-
               <div className="form-group">
-                <label className="form-label" htmlFor="title">Request Title *</label>
-                <input
-                  id="title" type="text" className="form-input"
-                  placeholder="e.g. Fantasy warrior OC full body"
-                  {...register("title", {
-                    required: "Please give your request a title",
-                    minLength: { value: 5, message: "Title must be at least 5 characters" },
-                  })}
-                />
-                {errors.title && <p className="form-error">{errors.title.message}</p>}
-              </div>
-
-              <div className="form-group">
-                <label className="form-label" htmlFor="description">
-                  Description *
-                  <span className="form-label-hint"> (character, scene, mood, colors, etc.)</span>
+                <label className="form-label" htmlFor="order_details">
+                  Request Description
                 </label>
                 <textarea
-                  id="description" className="form-input form-textarea" rows={5}
-                  placeholder="Describe your character's appearance, the scene, color palette, mood/tone, etc."
-                  {...register("description", {
-                    required: "A description is required",
-                    minLength: { value: 20, message: "Please provide at least 20 characters of detail" },
+                  id="order_details"
+                  className="form-input form-textarea"
+                  rows={8}
+                  placeholder="Describe the artwork you want, including subject, style, references, pose, mood, colors, deadline, and anything else the creator should know."
+                  {...register("order_details", {
+                    required: "Please enter your request details",
+                    minLength: {
+                      value: 10,
+                      message: "Please provide a bit more detail",
+                    },
                   })}
                 />
-                {errors.description && <p className="form-error">{errors.description.message}</p>}
+                {errors.order_details && (
+                  <p className="form-error">{errors.order_details.message}</p>
+                )}
               </div>
 
               <div className="form-group">
-                <label className="form-label" htmlFor="referenceLinks">
-                  Reference Links
-                  <span className="form-label-hint"> (optional)</span>
+                <label className="form-label" htmlFor="amountDollars">
+                  Payment Amount (USD)
                 </label>
-                <input id="referenceLinks" type="text" className="form-input"
-                  placeholder="https://example.com/ref1, ..."
-                  {...register("referenceLinks")}
+                <input
+                  id="amountDollars"
+                  type="number"
+                  min="1"
+                  step="0.01"
+                  className="form-input"
+                  placeholder="25.00"
+                  {...register("amountDollars", {
+                    required: "Please enter an amount",
+                    min: {
+                      value: 1,
+                      message: "Amount must be at least $1.00",
+                    },
+                  })}
                 />
+                {errors.amountDollars && (
+                  <p className="form-error">{errors.amountDollars.message}</p>
+                )}
               </div>
 
-              <div className="form-group">
-                <label className="form-label" htmlFor="characterCount">Number of Characters</label>
-                <select id="characterCount" className="form-input" {...register("characterCount")}>
-                  <option value="1">1 character</option>
-                  <option value="2">2 characters</option>
-                  <option value="3">3 characters</option>
-                  <option value="4+">4+ characters (contact first)</option>
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label" htmlFor="deadline">
-                  Preferred Deadline
-                  <span className="form-label-hint"> (optional)</span>
-                </label>
-                <input id="deadline" type="date" className="form-input"
-                  min={new Date().toISOString().split("T")[0]}
-                  {...register("deadline")}
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label" htmlFor="notes">Additional Notes</label>
-                <textarea id="notes" className="form-input form-textarea" rows={3}
-                  placeholder="Anything else you'd like the creator to know..."
-                  {...register("notes")}
-                />
-              </div>
-
-              {/* Payment notice for backend creators with tiers */}
-              {creator.user_id && creator.tiers?.length > 0 && (
-                <div style={{ background: "rgba(88,101,242,0.1)", border: "1px solid rgba(88,101,242,0.3)", borderRadius: 6, padding: "0.75rem 1rem", marginBottom: "1rem", fontSize: "0.875rem", color: "#b0b4d4" }}>
-                  💳 After submitting, you'll be asked to hold{" "}
-                  <strong>
-                    ${creator.tiers.find((t) => t.name === selectedTierName)?.price ?? "—"}
-                  </strong>{" "}
-                  in escrow. Funds are only released when you approve the final work.
-                </div>
-              )}
-
-              <button type="submit" className="btn btn-primary btn-large" disabled={isSubmitting}>
-                {isSubmitting ? "Submitting…" : "Submit Art Request →"}
+              <button
+                type="submit"
+                className="btn btn-primary btn-large"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? "Creating Request..." : "Submit Request"}
               </button>
             </form>
           </div>

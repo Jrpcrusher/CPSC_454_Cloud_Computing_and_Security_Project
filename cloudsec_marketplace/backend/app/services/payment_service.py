@@ -43,8 +43,7 @@ def get_stripe_client() -> StripeClient:
 # 1. PAYMENT INTENT — Buyer initiates payment
 # ═══════════════════════════════════════════════════════════════════════════
 
-def create_payment_intent(order_id: str, buyer_id: str, artist_id: str,
-                          amount: int, currency: str, db):
+def create_payment_intent(order_id: str, buyer_id: str, artist_id: str, amount: int, currency: str, db):
     """
     Create a Stripe PaymentIntent with manual capture (authorize only).
     The funds are placed on hold — NOT captured until escrow releases.
@@ -57,11 +56,22 @@ def create_payment_intent(order_id: str, buyer_id: str, artist_id: str,
     order = db["order"].find_one({"order_id": order_id})
     if not order:
         raise HTTPException(status_code=404, detail="Order not found.")
+
     if order.get("status") != "received":
         raise HTTPException(
             status_code=400,
             detail=f"Payment can only be started for orders in 'received' status. Current status: {order.get('status')}"
         )
+
+    order_amount = order.get("amount")
+    order_currency = order.get("currency", "usd")
+
+    if order_amount is None or order_amount <= 0:
+        raise HTTPException(status_code=400, detail="Order does not have a valid amount.")
+
+    # Make sure the service uses the order's stored pricing
+    amount = order_amount
+    currency = order_currency
 
     # Check no existing active transaction for this order
     existing = db["transaction"].find_one({
@@ -69,7 +79,10 @@ def create_payment_intent(order_id: str, buyer_id: str, artist_id: str,
         "status": {"$nin": ["failed", "refunded", "canceled"]}
     })
     if existing:
-        raise HTTPException(status_code=400, detail="Active transaction already exists for this order.")
+        raise HTTPException(
+            status_code=400,
+            detail="Active transaction already exists for this order."
+        )
 
     # Create the Stripe PaymentIntent — manual capture holds funds without charging
     try:
@@ -77,7 +90,7 @@ def create_payment_intent(order_id: str, buyer_id: str, artist_id: str,
             params={
                 "amount": amount,
                 "currency": currency,
-                "capture_method": "manual",  # KEY: authorize only, capture later
+                "capture_method": "manual",
                 "metadata": {
                     "order_id": order_id,
                     "buyer_id": buyer_id,

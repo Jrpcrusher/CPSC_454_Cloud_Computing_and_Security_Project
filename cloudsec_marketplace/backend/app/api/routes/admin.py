@@ -9,9 +9,25 @@ router = APIRouter(
     dependencies=[Depends(get_current_admin)]
 )
 
-############################################
-# Admin routes possible
-############################################
+"""
+Endpoints:
+  GET           /admin/users
+  GET           /admin/users/search
+  GET           /admin/users/{user_id}
+  DELETE        /admin/users{user_id}
+
+  GET           /admin/users/{user_id}/permissions
+  PATCH         /admin/users/{user_id}/permissions
+
+  GET           /admin/users/{user_id}/images
+  GET           /admin/users{user_id}/images/{image_id}
+  DELETE        /admin/users/{user_id}/images/{image_id}
+
+  GET           /admin/users/{user_id}/orders
+  GET           /admin/users{user_id}/orders/{order_id}
+  DELETE        /admin/users/{user_id}/orders/{order_id}
+ 
+"""
 
 # users
 @router.get("/users", response_model=list[UserProfileAdminView]) # View all user profiles (admin view)

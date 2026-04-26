@@ -62,6 +62,12 @@ def create_payment_intent(
     if order["client"]["user_id"] != current_user["user_id"]:
         raise HTTPException(status_code=403, detail="Not authorized for this order")
 
+    amount = order.get("amount")
+    currency = order.get("currency", "usd")
+
+    if amount is None or amount <= 0:
+        raise HTTPException(status_code=400, detail="Order does not have a valid amount.")
+
     buyer_id = order["client"]["user_id"]
     artist_id = order["artist"]["user_id"]
 
@@ -69,8 +75,8 @@ def create_payment_intent(
         order_id=str(payload.order_id),
         buyer_id=buyer_id,
         artist_id=artist_id,
-        amount=payload.amount,
-        currency=payload.currency,
+        amount=amount,
+        currency=currency,
         db=db,
     )
     return result

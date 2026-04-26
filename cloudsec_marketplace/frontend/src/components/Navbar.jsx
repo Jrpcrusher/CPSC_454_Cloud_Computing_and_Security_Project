@@ -14,12 +14,10 @@ export default function Navbar() {
   return (
     <nav className="navbar">
       <div className="navbar-container">
-        {/* Brand */}
         <Link to="/" className="navbar-brand-link">
           <img src={Logo} alt="Logo" className="logoImg" />
         </Link>
 
-        {/* Center links */}
         <div className="navbar-links">
           <NavLink
             to="/"
@@ -30,9 +28,11 @@ export default function Navbar() {
           >
             Explore
           </NavLink>
+
           {user && (
             <NavLink
               to="/dashboard"
+              end
               className={({ isActive }) =>
                 "navbar-link" + (isActive ? " navbar-link--active" : "")
               }
@@ -40,9 +40,10 @@ export default function Navbar() {
               Dashboard
             </NavLink>
           )}
-          {user && isCreator && user.creatorUsername && (
+
+          {user && isCreator && user.user_id && (
             <NavLink
-              to={`/creator/${user.creatorUsername}`}
+              to={`/creator/${user.user_id}`}
               className={({ isActive }) =>
                 "navbar-link" + (isActive ? " navbar-link--active" : "")
               }
@@ -50,9 +51,30 @@ export default function Navbar() {
               My Profile
             </NavLink>
           )}
+
+          {user && (
+            <NavLink
+              to="/dashboard/transactions"
+              className={({ isActive }) =>
+                "navbar-link" + (isActive ? " navbar-link--active" : "")
+              }
+            >
+              Transactions
+            </NavLink>
+          )}
+
+          {user && isCreator && (
+            <NavLink
+              to="/dashboard/portfolio"
+              className={({ isActive }) =>
+                "navbar-link" + (isActive ? " navbar-link--active" : "")
+              }
+            >
+              Portfolio
+            </NavLink>
+          )}
         </div>
 
-        {/* Right side */}
         <div className="navbar-auth">
           {!user ? (
             <div className="navbar-auth-links">
@@ -65,9 +87,14 @@ export default function Navbar() {
             </div>
           ) : (
             <div className="navbar-user">
-              <Link to="/dashboard" className="navbar-username-btn" title={user.email}>
-                {user.username || user.displayName}
+              <Link
+                to="/dashboard"
+                className="navbar-username-btn"
+                title={user.email}
+              >
+                {user.username}
               </Link>
+
               <button className="btn btn-primary btn-small" onClick={handleLogout}>
                 Log Out
               </button>

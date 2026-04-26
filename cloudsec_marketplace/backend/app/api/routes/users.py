@@ -17,10 +17,11 @@ Endpoints:
   GET    /user/me/images/{image_id}
   DELETE /user/me/images/{image_id}
   POST   /user/me/images/upload
-  GET    /user/me/order/client
-  GET    /user/me/order/artist
-  GET    /user/me/order/{order_id}
-  DELETE /user/me/order/{order_id}
+  GET    /user/me/orders/client
+  GET    /user/me/orders/artist
+  GET    /user/me/orders/{order_id}
+  DELETE /user/me/orders/{order_id}
+  PATCH  /user/me/become-creator
 """
 ############################################
 # User routes possible

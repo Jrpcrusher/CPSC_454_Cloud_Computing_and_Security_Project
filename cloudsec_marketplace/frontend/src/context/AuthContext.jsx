@@ -1,4 +1,4 @@
-import { createContext, useState, useContext, useEffect, useRef } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import api from "../services/apiClient";
 
 const AuthContext = createContext(null);
@@ -7,75 +7,41 @@ function mapBackendUser(data) {
   return {
     user_id: data.user_id,
     username: data.username,
-    displayName: data.username,
     email: data.email,
     role: data.role,
-    bio: data.description || "",
-    avatarUrl: data.pfp_url || null,
-    createdAt: data.register_date || null,
-    updatedAt: null,
-    creatorUsername: data.creator_username || null,
+    creator_username: data.creator_username || null,
+    description: data.description || "",
+    pfp_url: data.pfp_url || null,
+    register_date: data.register_date || null,
+    stripe_account_id: data.stripe_account_id || null,
   };
-}
-
-function getLocalCreatorData(userId) {
-  try {
-    const raw = localStorage.getItem(`creatorProfile_${userId}`);
-    if (!raw) return {};
-    return JSON.parse(raw);
-  } catch {
-    return {};
-  }
-}
-
-function base64ToBlob(base64Str) {
-  const [header, data] = base64Str.split(",");
-  const mimeType = header.match(/:(.*?);/)[1];
-  const bytes = atob(data);
-  const buf = new Uint8Array(bytes.length);
-  for (let i = 0; i < bytes.length; i++) buf[i] = bytes.charCodeAt(i);
-  return new Blob([buf], { type: mimeType });
 }
 
 export default function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const hasAttemptedBackfillRef = useRef(false);
+
+  async function refreshUser() {
+    try {
+      const me = await api.get("/user/me");
+      setUser(mapBackendUser(me));
+      return { success: true };
+    } catch (err) {
+      api.clearToken();
+      setUser(null);
+      return { success: false, error: err.message };
+    }
+  }
 
   useEffect(() => {
     const token = api.getToken();
+
     if (!token) {
       setLoading(false);
       return;
     }
-    api
-      .get("/user/me")
-      .then((data) => {
-        const base = mapBackendUser(data);
-        const local = getLocalCreatorData(data.user_id);
-        const merged = { ...base, ...local };
-        setUser(merged);
 
-        // One-time backfill: if backend has role=creator but no creator_username,
-        // and localStorage has one, silently push it to the backend.
-        if (
-          !hasAttemptedBackfillRef.current &&
-          data.role === "creator" &&
-          !data.creator_username &&
-          merged.creatorUsername
-        ) {
-          hasAttemptedBackfillRef.current = true;
-          api
-            .patch("/user/me/become-creator", { creator_username: merged.creatorUsername })
-            .catch((err) => {
-              console.warn("Creator username backfill failed:", err.message);
-            });
-        }
-      })
-      .catch(() => {
-        api.clearToken();
-      })
-      .finally(() => setLoading(false));
+    refreshUser().finally(() => setLoading(false));
   }, []);
 
   async function signUp(username, email, password) {
@@ -89,12 +55,16 @@ export default function AuthProvider({ children }) {
 
   async function login(username, password) {
     try {
-      const tokenData = await api.postForm("/auth/login", { username, password });
+      const tokenData = await api.postForm("/auth/login", {
+        username,
+        password,
+      });
+
       api.setToken(tokenData.access_token);
+
       const me = await api.get("/user/me");
-      const base = mapBackendUser(me);
-      const local = getLocalCreatorData(me.user_id);
-      setUser({ ...base, ...local });
+      setUser(mapBackendUser(me));
+
       return { success: true };
     } catch (err) {
       return { success: false, error: err.message };
@@ -105,96 +75,62 @@ export default function AuthProvider({ children }) {
     try {
       await api.post("/auth/logout");
     } catch {
-      // ignore — clear client-side regardless
+      // ignore logout API failures and clear client state anyway
     }
+
     api.clearToken();
     setUser(null);
   }
 
-  // avatarSource can be a File, Blob, or base64 string
-  async function updateProfile({ displayName, bio, avatarSource } = {}) {
+  async function updateProfile({ username, description, avatarFile } = {}) {
     try {
       const settingsUpdate = {};
-      if (displayName !== undefined) settingsUpdate.username = displayName;
-      if (bio !== undefined) settingsUpdate.description = bio;
+
+      if (username !== undefined) {
+        settingsUpdate.username = username;
+      }
+
+      if (description !== undefined) {
+        settingsUpdate.description = description;
+      }
 
       if (Object.keys(settingsUpdate).length > 0) {
         await api.patch("/user/me/settings", settingsUpdate);
       }
 
-      if (avatarSource !== undefined && avatarSource !== null) {
-        let blob =
-          avatarSource instanceof Blob
-            ? avatarSource
-            : typeof avatarSource === "string" && avatarSource.startsWith("data:")
-            ? base64ToBlob(avatarSource)
-            : null;
-
-        if (blob) {
-          const fd = new FormData();
-          fd.append("image", blob, "avatar.jpg");
-          await api.post("/user/me/settings/pfp", fd);
-        }
-      } else if (avatarSource === null) {
-        // Removal not supported by the backend; silently skip
+      if (avatarFile instanceof Blob) {
+        const formData = new FormData();
+        formData.append("image", avatarFile, "avatar.jpg");
+        await api.post("/user/me/settings/pfp", formData);
       }
 
       const me = await api.get("/user/me");
-      const base = mapBackendUser(me);
-      const local = getLocalCreatorData(me.user_id);
-      setUser((prev) => ({ ...prev, ...base, ...local }));
+      setUser(mapBackendUser(me));
+
       return { success: true };
     } catch (err) {
       return { success: false, error: err.message };
     }
   }
 
-  async function becomeCreator(creatorProfile) {
-    if (!user) return { success: false, error: "Not logged in" };
-
-    const userCreators = JSON.parse(localStorage.getItem("userCreators") || "[]");
-    if (userCreators.find((c) => c.username === creatorProfile.username)) {
-      return { success: false, error: "Username already taken" };
+  async function becomeCreator({ creator_username }) {
+    if (!user) {
+      return { success: false, error: "Not logged in" };
     }
 
-    // Persist creator role + username to backend
     try {
-      await api.patch("/user/me/become-creator", { creator_username: creatorProfile.username });
+      await api.patch("/user/me/become-creator", { creator_username });
+
+      const me = await api.get("/user/me");
+      setUser(mapBackendUser(me));
+
+      return { success: true };
     } catch (err) {
       return { success: false, error: err.message };
     }
-
-    const fullProfile = {
-      ...creatorProfile,
-      id: user.user_id,
-      user_id: user.user_id,
-      avatar:
-        user.avatarUrl ||
-        `https://ui-avatars.com/api/?name=${encodeURIComponent(creatorProfile.displayName)}&background=5865f2&color=fff&size=150`,
-      banner: `https://picsum.photos/seed/${creatorProfile.username}/1200/300`,
-      portfolio: [],
-      stats: { completedRequests: 0, rating: 0, responseTime: "TBD" },
-    };
-    userCreators.push(fullProfile);
-    localStorage.setItem("userCreators", JSON.stringify(userCreators));
-
-    const localData = { role: "creator", creatorUsername: creatorProfile.username };
-    localStorage.setItem(`creatorProfile_${user.user_id}`, JSON.stringify(localData));
-    setUser((prev) => ({ ...prev, ...localData }));
-    return { success: true };
   }
 
-  function updateCreatorProfile(changes) {
-    if (!user?.creatorUsername) return { success: false, error: "Not a creator" };
-    const userCreators = JSON.parse(localStorage.getItem("userCreators") || "[]");
-    const next = userCreators.map((c) =>
-      c.username === user.creatorUsername ? { ...c, ...changes } : c,
-    );
-    localStorage.setItem("userCreators", JSON.stringify(next));
-    return { success: true };
-  }
-
-  const isCreator = user?.role === "creator";
+  const isCreator = user?.role === "creator" || user?.role === "admin";
 
   return (
     <AuthContext.Provider
@@ -205,9 +141,9 @@ export default function AuthProvider({ children }) {
         signUp,
         login,
         logout,
+        refreshUser,
         updateProfile,
         becomeCreator,
-        updateCreatorProfile,
       }}
     >
       {children}
