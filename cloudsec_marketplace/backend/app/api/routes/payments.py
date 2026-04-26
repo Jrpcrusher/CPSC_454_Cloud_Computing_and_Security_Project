@@ -111,7 +111,7 @@ async def stripe_webhook(request: Request, db=Depends(get_db)):
     because Stripe requires the exact raw body for signature verification.
     """
     payload = await request.body()
-    sig_header = request.headers.get("stripe-signature")
+    sig_header = request.headers.get("Stripe-Signature")
 
     if not settings.STRIPE_WEBHOOK_SECRET:
         raise HTTPException(status_code=500, detail="Webhook secret not configured.")

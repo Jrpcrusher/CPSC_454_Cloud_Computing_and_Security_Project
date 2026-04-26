@@ -17,8 +17,8 @@ def create_app():
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["https://frontend-deployment.d34iq850hovqq.amplifyapp.com",
-                       "http://localhost:5173"],
+        allow_origins=["http://localhost:5173"],
+        allow_origin_regex=r"https://.*\.amplifyapp\.com",
         allow_credentials=True, # Allows cookies and such to be sent to send credentials
         allow_methods=["*"], # All methods are allowed, such GET, POST, PUT, DELETE, etc.
         allow_headers=["*"], # Allows for all HTTP header types
