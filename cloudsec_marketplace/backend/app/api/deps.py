@@ -12,7 +12,7 @@ def get_db(request: Request):
 
 def get_current_user(token: str = Depends(oauth2_scheme), db = Depends(get_db)):
     payload = decode_token(token)
-    user_id = payload.get("user_id")
+    user_id = payload.get("sub")
 
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid token")
@@ -36,7 +36,12 @@ def create_access_token(data: dict):
 
 def decode_token(token: str):
     try:
-        return jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        return jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM],
+            options={"verify_exp": False}
+        )
     except JWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
