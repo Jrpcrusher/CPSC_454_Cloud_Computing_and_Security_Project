@@ -242,6 +242,7 @@ export default function Dashboard() {
 
   const effectiveProfile = profile || user;
   const isCreator = effectiveProfile?.role === "creator" || effectiveProfile?.role === "admin";
+  const isAdmin = effectiveProfile?.role === "admin";
 
   const displayName =
     effectiveProfile?.creator_username ||
@@ -272,6 +273,7 @@ export default function Dashboard() {
               <div className="dpc-name-row">
                 <h2 className="dpc-name">{displayName}</h2>
                 {isCreator && <span className="creator-role-badge">Creator</span>}
+                {isAdmin && <span className="creator-role-badge">Admin</span>}
               </div>
               <p className="dpc-email">{effectiveProfile?.email}</p>
               {effectiveProfile?.description && (
@@ -300,6 +302,22 @@ export default function Dashboard() {
         </div>
 
         {isCreator && <StripeOnboardingBanner />}
+
+        {isAdmin && (
+          <div className="become-creator-cta">
+            <div className="bc-cta-text">
+              <span className="bc-cta-icon">🛠️</span>
+              <div>
+                <strong>Admin tools</strong>
+                <p>Manage users, permissions, images, and orders from the admin panel.</p>
+              </div>
+            </div>
+
+            <Link to="/admin/users" className="btn btn-primary btn-small">
+              Open Admin Panel
+            </Link>
+          </div>
+        )}
 
         {!isCreator && (
           <div className="become-creator-cta">
