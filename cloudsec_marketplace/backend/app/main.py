@@ -1,5 +1,6 @@
 # Set up the initial connectivity for HTTP requests using FastAPI
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from .core.config import settings
 from pymongo import MongoClient
@@ -14,6 +15,19 @@ from .api.__init__ import (
 # This function creates a FastAPI instance
 def create_app():
     app = FastAPI(title="Marketplace Backend API")
+
+    @app.middleware("http")
+    async def verify_cloudfront_header(request: Request, call_next):
+        # allow some public / non-protected routes
+        if request.url.path.startswith(("/health", "/docs", "/openapi.json")):
+            return await call_next(request)
+
+        header = request.headers.get("origin_verify_key")
+
+        if header != settings.ORIGIN_VERIFY_SECRET:
+            return JSONResponse(status_code=403, content={"detail": "Forbidden"})
+
+        return await call_next(request)
 
     app.add_middleware(
         CORSMiddleware,

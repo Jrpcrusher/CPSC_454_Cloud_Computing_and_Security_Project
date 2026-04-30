@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     AWS_REGION: str = "us-east-1"
     AWS_S3_BUCKET_NAME: str = _config.get("AWS_S3_BUCKET_NAME", "")
     SECRET_KEY: str = _config.get("SECRET_KEY", "")# the key to hash with
+    ORIGIN_VERIFY_SECRET: str = _config.get("ORIGIN_VERIFY_SECRET", "")
     
     ALGORITHM: ClassVar[str] = "HS256" # Signing Algorithm we chose, HMAC + SHA-256
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 # How long our token is valid for
