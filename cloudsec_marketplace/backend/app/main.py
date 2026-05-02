@@ -22,9 +22,9 @@ def create_app():
         if request.url.path.startswith(("/health", "/docs", "/openapi.json")):
             return await call_next(request)
 
-        header = request.headers.get("origin_verify_key")
+        header = request.headers.get("ORIGIN_VERIFY_KEY")
 
-        if header != settings.ORIGIN_VERIFY_SECRET:
+        if header != settings.ORIGIN_VERIFY_KEY:
             return JSONResponse(status_code=403, content={"detail": "Forbidden"})
 
         return await call_next(request)
